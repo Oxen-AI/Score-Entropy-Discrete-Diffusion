@@ -5,12 +5,12 @@ import numpy as np
 
 
 def get_noise(config):
-    if config.noise.type == "geometric":
-        return GeometricNoise(config.noise.sigma_min, config.noise.sigma_max)
-    elif config.noise.type == "loglinear":
+    if config['noise']['type'] == "geometric":
+        return GeometricNoise(config['noise']['sigma_min'], config['noise']['sigma_max'])
+    elif config['noise']['type'] == "loglinear":
         return LogLinearNoise()
     else:
-        raise ValueError(f"{config.noise.type} is not a valid noise")
+        raise ValueError(f"{config['noise']['type']} is not a valid noise")
 
 
 class Noise(abc.ABC, nn.Module):

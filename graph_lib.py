@@ -9,12 +9,12 @@ from torch.cuda.amp import custom_fwd, custom_bwd
 from catsample import sample_categorical
 
 def get_graph(config, device):
-    if config.graph.type == "uniform":
-        return Uniform(config.tokens)
-    elif config.graph.type == "absorb":
-        return Absorbing(config.tokens)
+    if config['graph']['type'] == "uniform":
+        return Uniform(config['tokens'])
+    elif config['graph']['type'] == "absorb":
+        return Absorbing(config['tokens'])
     else:
-        raise ValueError(f"Graph {config.graph.type} not valid")
+        raise ValueError(f"Graph {config['graph']['type']} not valid")
 
 
 def unsqueeze_as(x, y, back=True):

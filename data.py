@@ -1,5 +1,7 @@
 import re
-from transformers import GPT2TokenizerFast
+import string
+from transformers import GPT2TokenizerFast, AutoTokenizer
+from tokenizers import Tokenizer
 from datasets import load_dataset
 from itertools import chain
 import numpy as np
@@ -11,7 +13,7 @@ import requests
 import json
 from datasets import Dataset
 
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 
 
 def cycle_loader(dataloader, sampler=None):
@@ -151,7 +153,14 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
             return text
         return detok
 
-    tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    chars = string.ascii_letters # This character vocab!
+    model_max_length = 1024
+    # tokenizer = Tokenizer.from_file("pretrained_tokenizer/tokenizer.json")
+    tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
+    # tokenizer.eos_token = "[EOS]"
+    print(tokenizer.get_vocab())
+    print(len(tokenizer.get_vocab()))
+    print(tokenizer.eos_token)
     EOS = tokenizer.encode(tokenizer.eos_token)[0]
 
     def preprocess_and_tokenize(example):
@@ -199,27 +208,22 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
     return chunked_dataset
 
 
-def get_dataloaders(config, distributed=True):
-    if config.training.batch_size % (config.ngpus * config.training.accum) != 0:
-            raise ValueError(f"Train Batch Size {config.training.batch_size} is not divisible by {config.ngpus} gpus with accumulation {config.training.accum}.")
-    if config.eval.batch_size % (config.ngpus * config.training.accum) != 0:
-        raise ValueError(f"Eval Batch Size for {config.eval.batch_size} is not divisible by {config.ngpus} gpus with accumulation {config.training.accum}.")
+def get_dataloaders(config):
+    if config['training']['batch_size'] % (config['ngpus'] * config['training']['accum']) != 0:
+            raise ValueError(f"Train Batch Size {config['training']['batch_size']} is not divisible by {config['ngpus']} gpus with accumulation {config['training']['accum']}.")
+    if config['eval']['batch_size'] % (config['ngpus'] * config['training']['accum']) != 0:
+        raise ValueError(f"Eval Batch Size for {config['eval']['batch_size']} is not divisible by {config['ngpus']} gpus with accumulation {config['training']['accum']}.")
 
 
-    train_set = get_dataset(config.data.train, "train", cache_dir=config.data.cache_dir, block_size=config.model.length)
-    valid_set = get_dataset(config.data.valid, "validation" if config.data.valid != "text8" else "test", cache_dir=config.data.cache_dir, block_size=config.model.length)
+    train_set = get_dataset(config['data']['train'], "train", cache_dir=config['data']['cache_dir'], block_size=config['model']['length'])
+    valid_set = get_dataset(config['data']['valid'], "validation" if config['data']['valid'] != "text8" else "test", cache_dir=config['data']['cache_dir'], block_size=config['model']['length'])
 
-    if distributed:
-        train_sampler = DistributedSampler(train_set) 
-        test_sampler = DistributedSampler(valid_set)
-    else:
-        train_sampler = None
-        test_sampler = None
-    
+    train_sampler = None
+    test_sampler = None
 
     train_loader = cycle_loader(DataLoader(
         train_set,
-        batch_size=config.training.batch_size // (config.ngpus * config.training.accum),
+        batch_size=config['training']['batch_size'] // (config['ngpus'] * config['training']['accum']),
         sampler=train_sampler,
         num_workers=4,
         pin_memory=True,
@@ -228,7 +232,7 @@ def get_dataloaders(config, distributed=True):
     ))
     valid_loader = cycle_loader(DataLoader(
         valid_set,
-        batch_size=config.eval.batch_size // (config.ngpus * config.training.accum),
+        batch_size=config['eval']['batch_size'] // (config['ngpus'] * config['training']['accum']),
         sampler=test_sampler,
         num_workers=4,
         pin_memory=True,

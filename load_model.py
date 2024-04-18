@@ -20,7 +20,7 @@ def load_model_local(root_dir, device):
     graph = graph_lib.get_graph(cfg, device)
     noise = noise_lib.get_noise(cfg).to(device)
     score_model = SEDD(cfg).to(device)
-    ema = ExponentialMovingAverage(score_model.parameters(), decay=cfg.training.ema)
+    ema = ExponentialMovingAverage(score_model.parameters(), decay=cfg['training']['ema'])
 
     ckpt_dir = os.path.join(root_dir, "checkpoints-meta", "checkpoint.pth")
     loaded_state = torch.load(ckpt_dir, map_location=device)

@@ -9,7 +9,6 @@ import sampling
 def main():
     parser = argparse.ArgumentParser(description="Generate some samples")
     parser.add_argument("--model_path", default="louaaron/sedd-medium", type=str)
-    parser.add_argument("--dataset", default="wikitext103", type=str)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--steps", type=int, default=1024)
     parser.add_argument("--prefix", type=str, default="Hi, my name is")
@@ -17,6 +16,9 @@ def main():
     args = parser.parse_args()
 
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+
+    print("Complete prefix: ", args.prefix)
+    print("with suffix: ", args.suffix)
 
     prefix_ids = tokenizer(args.prefix).input_ids
     suffix_ids = tokenizer(args.suffix).input_ids
@@ -34,6 +36,7 @@ def main():
         x[:, input_locs] = input_ids
         return x
     
+    print("Load model: ", args.model_path)
     device = torch.device('cuda')
     model, graph, noise = load_model(args.model_path, device)
     

@@ -2,6 +2,7 @@ import abc
 import torch
 import torch.nn.functional as F
 from catsample import sample_categorical
+from tqdm import tqdm
 
 from model import utils as mutils
 
@@ -110,9 +111,9 @@ def get_sampling_fn(config, graph, noise, batch_dims, eps, device):
     sampling_fn = get_pc_sampler(graph=graph,
                                  noise=noise,
                                  batch_dims=batch_dims,
-                                 predictor=config.sampling.predictor,
-                                 steps=config.sampling.steps,
-                                 denoise=config.sampling.noise_removal,
+                                 predictor=config['sampling']['predictor'],
+                                 steps=config['sampling']['steps'],
+                                 denoise=config['sampling']['noise_removal'],
                                  eps=eps,
                                  device=device)
     
@@ -131,11 +132,11 @@ def get_pc_sampler(graph, noise, batch_dims, predictor, steps, denoise=True, eps
         timesteps = torch.linspace(1, eps, steps + 1, device=device)
         dt = (1 - eps) / steps
 
-        for i in range(steps):
+        print(f"Sampling with {steps} steps")
+        for i in tqdm(range(steps)):
             t = timesteps[i] * torch.ones(x.shape[0], 1, device=device)
             x = projector(x)
             x = predictor.update_fn(sampling_score_fn, x, t, dt)
-            
 
         if denoise:
             # denoising step

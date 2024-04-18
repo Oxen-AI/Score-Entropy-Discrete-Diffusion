@@ -36,15 +36,15 @@ def get_loss_fn(noise, graph, train, sampling_eps=1e-3, lv=False):
 
 
 def get_optimizer(config, params):
-    if config.optim.optimizer == 'Adam':
-        optimizer = optim.Adam(params, lr=config.optim.lr, betas=(config.optim.beta1, config.optim.beta2), eps=config.optim.eps,
-                               weight_decay=config.optim.weight_decay)
-    elif config.optim.optimizer == 'AdamW':
-        optimizer = optim.AdamW(params, lr=config.optim.lr, betas=(config.optim.beta1, config.optim.beta2), eps=config.optim.eps,
-                               weight_decay=config.optim.weight_decay)
+    if config['optim']['optimizer'] == 'Adam':
+        optimizer = optim.Adam(params, lr=config['optim']['lr'], betas=(config['optim']['beta1'], config['optim']['beta2']), eps=config['optim']['eps'],
+                               weight_decay=config['optim']['weight_decay'])
+    elif config['optim']['optimizer'] == 'AdamW':
+        optimizer = optim.AdamW(params, lr=config['optim']['lr'], betas=(config['optim']['beta1'], config['optim']['beta2']), eps=config['optim']['eps'],
+                               weight_decay=config['optim']['weight_decay'])
     else:
         raise NotImplementedError(
-            f'Optimizer {config.optim.optimizer} not supported yet!')
+            f"Optimizer {config['optim']['optimizer']} not supported yet!")
 
     return optimizer
 
@@ -56,9 +56,9 @@ def optimization_manager(config):
                     scaler, 
                     params, 
                     step, 
-                    lr=config.optim.lr,
-                    warmup=config.optim.warmup,
-                    grad_clip=config.optim.grad_clip):
+                    lr=config['optim']['lr'],
+                    warmup=config['optim']['warmup'],
+                    grad_clip=config['optim']['grad_clip']):
         """Optimizes with warmup and gradient clipping (disabled if negative)."""
         scaler.unscale_(optimizer)
 
