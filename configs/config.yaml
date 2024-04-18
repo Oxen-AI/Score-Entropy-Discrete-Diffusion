@@ -4,24 +4,26 @@ defaults:
   - override hydra/launcher: submitit_slurm
 
 ngpus: 1
-tokens: 2049
+tokens: 384
 
 training:
-  batch_size: 1
+  batch_size: 32
   accum: 1
   n_iters: 1300001
-  snapshot_freq: 50000
+  snapshot_freq: 10000
   log_freq: 50
-  eval_freq: 100
-  snapshot_freq_for_preemption: 10000
+  eval_freq: 500
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
+  output_dir: models
 
 data:
-  train: ptb
+  train: wikitext2
   valid: lambada
   cache_dir: data
+  oxen:
+    remote_repo: ox/Score-Entropy-Discrete-Diffusion
 
 graph:
   type: absorb
@@ -41,7 +43,7 @@ sampling:
 eval:
   batch_size: 512
   perplexity: True
-  perplexity_batch_size: 32
+  perplexity_batch_size: 4
 
 optim:
   weight_decay: 0

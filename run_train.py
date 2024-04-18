@@ -5,7 +5,7 @@ import gc
 from itertools import chain
 import yaml
 from aim import Run
-
+import oxen
 
 import numpy as np
 import torch
@@ -34,7 +34,7 @@ def main(rank=0, world_size=1):
 
     print(cfg)
 
-    work_dir = "output"
+    work_dir = cfg['training']['output_dir']
     run = Run()
     run["hparams"] = cfg
 
@@ -70,6 +70,11 @@ def main(rank=0, world_size=1):
         mprint("WARNING: Using device {}".format(device))
     mprint(f"Found {os.cpu_count()} total number of CPUs.")
 
+    # Create remote oxen repo
+    repo = oxen.RemoteRepo(cfg['data']['oxen']['remote_repo'])
+    if not repo.exists():
+        repo.create()
+
     # build token graph
     graph = graph_lib.get_graph(cfg, device)
 
@@ -100,7 +105,6 @@ def main(rank=0, world_size=1):
     # load in state
     state = utils.restore_checkpoint(checkpoint_meta_dir, state, device)
     initial_step = int(state['step'])
-
 
     # load in tokenizer
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
@@ -146,9 +150,6 @@ def main(rank=0, world_size=1):
 
                 mprint("step: %d, training_loss: %.5e" % (step, loss.item()))
 
-            if step % cfg['training']['snapshot_freq_for_preemption'] == 0 and rank == 0:
-                utils.save_checkpoint(checkpoint_meta_dir, state)
-
             if step % cfg['training']['eval_freq'] == 0:
                 if cfg['data']['valid'] != "text8":
                     eval_batch = next(eval_iter)['input_ids'].to(device)
@@ -161,7 +162,7 @@ def main(rank=0, world_size=1):
                 mprint("step: %d, evaluation_loss: %.5e" % (step, eval_loss.item()))
                 run.track(eval_loss.item(), name='loss', step=state['step'], context={ "subset":"eval" })
 
-            if step > 0 and step % cfg['training']['snapshot_freq'] == 0 or step == num_train_steps:
+            if step >= 0 and step % cfg['training']['snapshot_freq'] == 0 or step == num_train_steps:
                 # Save the checkpoint.
                 save_step = step // cfg['training']['snapshot_freq']
                 if rank == 0:
@@ -187,6 +188,8 @@ def main(rank=0, world_size=1):
                         for sentence in sentences:
                             file.write(sentence + "\n")
                             file.write("============================================================================================\n")
+                    repo.add(file_name)
+                    repo.commit(f"Sample at step {step}")
 
                     if cfg['eval']['perplexity']:
                         with torch.no_grad():
@@ -202,6 +205,8 @@ def main(rank=0, world_size=1):
                             total_perplexity /= batches
                             total_perplexity /= world_size
                             mprint(f"Generative Perplexity at step: {step}. Perplexity: {total_perplexity:.3f}.")
+
+                            run.track(total_perplexity, name='perplexity', step=state['step'], context={ "subset":"eval" })
 
                             del eval_model, logits, loss
 
