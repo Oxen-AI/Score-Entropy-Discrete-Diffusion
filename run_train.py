@@ -130,6 +130,7 @@ def main(rank=0, world_size=1):
     num_train_steps = cfg['training']['n_iters']
     mprint(f"Starting training loop at step {initial_step}.")
 
+    best_perplexity = float('inf')
 
     while state['step'] < num_train_steps + 1:
         step = state['step']
@@ -159,16 +160,11 @@ def main(rank=0, world_size=1):
 
                 eval_loss /= world_size
 
-                mprint("step: %d, evaluation_loss: %.5e" % (step, eval_loss.item()))
-                run.track(eval_loss.item(), name='loss', step=state['step'], context={ "subset":"eval" })
+                if step > 0:
+                    mprint("step: %d, evaluation_loss: %.5e" % (step, eval_loss.item()))
+                    run.track(eval_loss.item(), name='loss', step=state['step'], context={ "subset":"eval" })
 
-            if step >= 0 and step % cfg['training']['snapshot_freq'] == 0 or step == num_train_steps:
-                # Save the checkpoint.
-                save_step = step // cfg['training']['snapshot_freq']
-                if rank == 0:
-                    utils.save_checkpoint(os.path.join(
-                        checkpoint_dir, f'checkpoint_{save_step}.pth'), state)
-
+            if step > 0 and step % cfg['training']['snapshot_freq'] == 0 or step == num_train_steps:
                 # Generate and save samples
                 if cfg['training']['snapshot_sampling']:
                     mprint(f"Generating text at step: {step}")
@@ -191,24 +187,36 @@ def main(rank=0, world_size=1):
                     repo.add(file_name)
                     repo.commit(f"Sample at step {step}")
 
-                    if cfg['eval']['perplexity']:
-                        with torch.no_grad():
-                            eval_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(device).eval()
-                            batches = sample.shape[0] // cfg['eval']['perplexity_batch_size']
-                            total_perplexity = 0
-                            for i in range(batches):
-                                s = sample[i * cfg['eval']['perplexity_batch_size']:(i + 1) * cfg['eval']['perplexity_batch_size']]
-                                loss, logits = eval_model(s, labels=s)[:2]
-                                logits = logits.transpose(-1, -2)
-                                perplexity = F.cross_entropy(logits[..., :-1], s[..., 1:], reduction="none").mean(dim=-1).exp().mean()
-                                total_perplexity += perplexity
-                            total_perplexity /= batches
-                            total_perplexity /= world_size
-                            mprint(f"Generative Perplexity at step: {step}. Perplexity: {total_perplexity:.3f}.")
+                if cfg['eval']['perplexity']:
+                    with torch.no_grad():
+                        eval_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(device).eval()
+                        batches = sample.shape[0] // cfg['eval']['perplexity_batch_size']
+                        total_perplexity = 0
+                        for i in range(batches):
+                            s = sample[i * cfg['eval']['perplexity_batch_size']:(i + 1) * cfg['eval']['perplexity_batch_size']]
+                            loss, logits = eval_model(s, labels=s)[:2]
+                            logits = logits.transpose(-1, -2)
+                            perplexity = F.cross_entropy(logits[..., :-1], s[..., 1:], reduction="none").mean(dim=-1).exp().mean()
+                            total_perplexity += perplexity
+                        total_perplexity /= batches
+                        total_perplexity /= world_size
+                        mprint(f"Generative Perplexity at step: {step}. Perplexity: {total_perplexity:.3f}.")
 
-                            run.track(total_perplexity, name='perplexity', step=state['step'], context={ "subset":"eval" })
+                        run.track(total_perplexity, name='perplexity', step=state['step'], context={ "subset":"eval" })
 
-                            del eval_model, logits, loss
+                        del eval_model, logits, loss
+
+                        if best_perplexity < total_perplexity:
+                            best_perplexity = total_perplexity
+                            # write best perplexity to file
+                            with open(os.path.join(work_dir, "best_perplexity.txt"), 'w') as file:
+                                file.write(f"Best Perplexity: {best_perplexity:.3f} at step {step}.")
+                            # save best model
+                            utils.save_checkpoint(os.path.join(checkpoint_dir, f'checkpoint_best.pth'), state)
+                        else:
+                            # save latest model
+                            utils.save_checkpoint(os.path.join(checkpoint_dir, f'checkpoint_latest.pth'), state)
+
 
 if __name__ == "__main__":
     main()

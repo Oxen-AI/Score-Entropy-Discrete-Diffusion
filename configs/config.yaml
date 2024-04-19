@@ -7,23 +7,23 @@ ngpus: 1
 tokens: 384
 
 training:
-  batch_size: 32
+  batch_size: 1
   accum: 1
   n_iters: 1300001
-  snapshot_freq: 10000
+  snapshot_freq: 1000
   log_freq: 50
   eval_freq: 500
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
-  output_dir: models
+  output_dir: train_baby_names
 
 data:
-  train: wikitext2
-  valid: lambada
+  train: baby_names_train
+  valid: baby_names_test
   cache_dir: data
   oxen:
-    remote_repo: ox/Score-Entropy-Discrete-Diffusion
+    remote_repo: ox/Score-Entropy-Discrete-Diffusion-ctx-64
 
 graph:
   type: absorb
@@ -43,7 +43,7 @@ sampling:
 eval:
   batch_size: 512
   perplexity: True
-  perplexity_batch_size: 4
+  perplexity_batch_size: 1
 
 optim:
   weight_decay: 0
@@ -60,9 +60,9 @@ model:
   type: ddit
   hidden_size: 768
   cond_dim: 128
-  length: 1024
-  n_blocks: 12
-  n_heads: 12
+  length: 64
+  n_blocks: 8
+  n_heads: 8
   scale_by_sigma: True
   dropout: 0.1
 

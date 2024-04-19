@@ -97,24 +97,31 @@ def lambada_detokenizer(text):
     text = text.replace("”", '"')
     return '\n'+text.strip()
 
+def read_jsonl_to_list(url):
+    response = requests.get(url, stream=True)
+    data_list = []
+
+    # Process each line in the response content
+    for line in response.iter_lines(decode_unicode=True):
+        if line:
+            data = json.loads(line)
+            data_list.append(data)
+
+    return data_list
 
 def get_lambada_test_dataset():
     url = "https://openaipublic.blob.core.windows.net/gpt-2/data/lambada_test.jsonl"
 
-    def read_jsonl_to_list(url):
-        response = requests.get(url, stream=True)
-        data_list = []
-
-        # Process each line in the response content
-        for line in response.iter_lines(decode_unicode=True):
-            if line:
-                data = json.loads(line)
-                data_list.append(data)
-
-        return data_list
+    
 
     lambada_data = read_jsonl_to_list(url)
     dataset = Dataset.from_list(lambada_data)
+    return dataset
+
+def get_baby_names_dataset(name):
+    url = f"https://hub.oxen.ai/api/repos/datasets/baby_names/file/main/{name}.jsonl"
+    data = read_jsonl_to_list(url)
+    dataset = Dataset.from_list(data)
     return dataset
 
 
@@ -127,10 +134,14 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
         dataset = load_dataset("ptb_text_only", cache_dir=cache_dir)
     elif name == "lambada":
         dataset = get_lambada_test_dataset()
+    elif name == "baby_names_train":
+        dataset = get_baby_names_dataset('train')
+    elif name == "baby_names_test":
+        dataset = get_baby_names_dataset('test')
     else:
         dataset = load_dataset(name, cache_dir=cache_dir)
 
-    if name == "lambada":
+    if name == "lambada" or name.startswith("baby_names"):
         data = dataset
     else:
         data = dataset[mode]
@@ -153,19 +164,17 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
             return text
         return detok
 
-    chars = string.ascii_letters # This character vocab!
-    model_max_length = 1024
-    # tokenizer = Tokenizer.from_file("pretrained_tokenizer/tokenizer.json")
     tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
-    # tokenizer.eos_token = "[EOS]"
-    print(tokenizer.get_vocab())
-    print(len(tokenizer.get_vocab()))
-    print(tokenizer.eos_token)
+    # print(tokenizer.get_vocab())
+    # print(len(tokenizer.get_vocab()))
+    # print(tokenizer.eos_token)
     EOS = tokenizer.encode(tokenizer.eos_token)[0]
 
     def preprocess_and_tokenize(example):
         if name == "ptb":
             text = example['sentence']
+        elif name.startswith("baby_names"):
+            text = example["Names"]
         else:
             text = example["text"]
         # print(list(example.keys()))
@@ -184,7 +193,7 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
     tokenized_dataset = data.map(preprocess_and_tokenize, batched=True, num_proc=num_proc, load_from_cache_file=True)
     if name == "ptb":
         tokenized_dataset = tokenized_dataset.remove_columns('sentence')
-    else:
+    elif not name.startswith("baby_names"):
         tokenized_dataset = tokenized_dataset.remove_columns('text')
     
 
