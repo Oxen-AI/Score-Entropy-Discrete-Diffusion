@@ -21,6 +21,7 @@ from model import SEDD
 from model.ema import ExponentialMovingAverage
 from transformers import GPT2TokenizerFast, GPT2LMHeadModel
 import yaml
+from character_tokenizer import CharacterTokenizer
 
 
 torch.backends.cudnn.benchmark = True
@@ -107,7 +108,13 @@ def main(rank=0, world_size=1):
     initial_step = int(state['step'])
 
     # load in tokenizer
-    tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    # tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    import string
+    chars = string.ascii_letters # This character vocab!
+    model_max_length = 2048
+    tokenizer = CharacterTokenizer(chars, model_max_length)
+
+
 
     # Build data iterators
     train_ds, eval_ds = data.get_dataloaders(cfg)
