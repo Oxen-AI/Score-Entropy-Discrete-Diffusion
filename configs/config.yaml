@@ -4,7 +4,7 @@ defaults:
   - override hydra/launcher: submitit_slurm
 
 ngpus: 1
-tokens: 384
+tokens: 59
 
 training:
   batch_size: 512
@@ -16,14 +16,14 @@ training:
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
-  output_dir: train_baby_names_2
+  output_dir: abc
 
 data:
   train: baby_names_train
   valid: baby_names_test
   cache_dir: data
   oxen:
-    remote_repo: ox/Score-Entropy-Discrete-Diffusion-Baby-Names-2
+    remote_repo: ox/Score-Entropy-Discrete-Diffusion-ABC
 
 graph:
   type: absorb

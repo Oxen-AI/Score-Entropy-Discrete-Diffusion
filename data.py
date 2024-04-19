@@ -2,10 +2,14 @@ import re
 import string
 from transformers import GPT2TokenizerFast, AutoTokenizer
 from tokenizers import Tokenizer
+from transformers import CanineTokenizer
 from datasets import load_dataset
 from itertools import chain
 import numpy as np
 import torch
+import string
+from character_tokenizer import CharacterTokenizer
+
 
 import urllib.request
 import zipfile
@@ -164,10 +168,25 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
             return text
         return detok
 
-    tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
-    # print(tokenizer.get_vocab())
-    # print(len(tokenizer.get_vocab()))
-    # print(tokenizer.eos_token)
+    # tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
+    # tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+
+    chars = string.ascii_letters # This character vocab!
+    model_max_length = 2048
+    tokenizer = CharacterTokenizer(chars, model_max_length)
+
+    chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+    def get_training_corpus():
+
+        for i in range(len(chars)):
+            yield f"{chars[i]}"
+
+    # tokenizer = tokenizer.train_new_from_iterator(get_training_corpus(), vocab_size=len(chars), initial_alphabet=chars)
+    # tokenizer = tokenizer.train_new_from_iterator(get_training_corpus(), 26)
+
+    print(len(tokenizer.get_vocab()))
+    print(tokenizer.get_vocab())
+    print(tokenizer.eos_token)
     EOS = tokenizer.encode(tokenizer.eos_token)[0]
 
     def preprocess_and_tokenize(example):
