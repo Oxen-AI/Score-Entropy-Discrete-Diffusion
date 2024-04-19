@@ -175,21 +175,13 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
     model_max_length = 2048
     tokenizer = CharacterTokenizer(chars, model_max_length)
 
-    chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
-    def get_training_corpus():
-
-        for i in range(len(chars)):
-            yield f"{chars[i]}"
-
-    # tokenizer = tokenizer.train_new_from_iterator(get_training_corpus(), vocab_size=len(chars), initial_alphabet=chars)
-    # tokenizer = tokenizer.train_new_from_iterator(get_training_corpus(), 26)
-
     print(len(tokenizer.get_vocab()))
     print(tokenizer.get_vocab())
     print(tokenizer.eos_token)
     EOS = tokenizer.encode(tokenizer.eos_token)[0]
 
     def preprocess_and_tokenize(example):
+        # print(example)
         if name == "ptb":
             text = example['sentence']
         elif name.startswith("baby_names"):
@@ -205,8 +197,27 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
         tokens = tokenizer(text, return_attention_mask=False)
         # add in EOS token following 
         # https://github.com/jcpeterson/openwebtext/blob/master/tokenize_text.py#L67
-        for token in tokens['input_ids']:
-            token.append(EOS)
+        # for token in tokens['input_ids']:
+        #     token.append(EOS)
+
+        # print(block_size)
+        # print(len(tokens))
+        # print(tokens)
+
+        # Pad batch to block_size
+        for i in range(len(tokens['input_ids'])):
+            if len(tokens['input_ids'][i]) < block_size:
+                tokens['input_ids'][i] = tokens['input_ids'][i] + [EOS] * (block_size - len(tokens['input_ids'][i]))
+            else:
+                tokens['input_ids'][i] = tokens['input_ids'][i][:block_size]
+            
+        # while len(tokens['input_ids']) < block_size:
+        #     tokens['input_ids'].append(EOS)
+
+        # # Truncate text to block_size
+        # if len(tokens['input_ids']) > block_size:
+        #     tokens['input_ids'] = tokens['input_ids'][:block_size]
+
         return tokens
     
     tokenized_dataset = data.map(preprocess_and_tokenize, batched=True, num_proc=num_proc, load_from_cache_file=True)
@@ -216,24 +227,42 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
         tokenized_dataset = tokenized_dataset.remove_columns('text')
     
 
-    def group_texts(examples):
-        # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-        total_length = len(concatenated_examples[list(examples.keys())[0]])
-        # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
-        # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
-        # Split by chunks of max_len.
-        result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-            for k, t in concatenated_examples.items()
-        }
-        return result
+    # def group_texts(examples):
+    #     # Concatenate all texts.
+    #     concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+    #     total_length = len(concatenated_examples[list(examples.keys())[0]])
+    #     # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
+    #     # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
+    #     total_length = (total_length // block_size) * block_size
+    #     # Split by chunks of max_len.
+    #     result = {
+    #         k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+    #         for k, t in concatenated_examples.items()
+    #     }
+    #     return result
 
-    chunked_dataset = tokenized_dataset.map(group_texts, batched=True, num_proc=num_proc, load_from_cache_file=True)
-    chunked_dataset = chunked_dataset.with_format('torch')
+    # chunked_dataset = tokenized_dataset.map(group_texts, batched=True, num_proc=num_proc, load_from_cache_file=True)
+    
+    # for e in tokenized_dataset:
+    #     print(e)
+    #     print(tokenized_dataset[e])
+    #     print()
 
-    return chunked_dataset
+    # def pad_texts(examples):
+    #     for k in examples.keys():
+    #         print(k)
+    #         print(examples[k])
+    #         for i in range(len(examples[k])):
+    #             print(i)
+    #             print(examples[k][i])
+    #             examples[k][i] = [examples[k][i]] + [EOS] * (block_size - len(examples[k][i]))
+    #         # examples[k] = [e + [EOS] * (block_size - len(e)) for e in examples[k]]
+    #     return examples
+
+    # padded_dataset = tokenized_dataset.map(tokenized_dataset, batched=True, num_proc=num_proc, load_from_cache_file=True)
+    padded_dataset = tokenized_dataset.with_format('torch')
+
+    return padded_dataset
 
 
 def get_dataloaders(config):
@@ -246,24 +275,30 @@ def get_dataloaders(config):
     train_set = get_dataset(config['data']['train'], "train", cache_dir=config['data']['cache_dir'], block_size=config['model']['length'])
     valid_set = get_dataset(config['data']['valid'], "validation" if config['data']['valid'] != "text8" else "test", cache_dir=config['data']['cache_dir'], block_size=config['model']['length'])
 
+    print(train_set)
+    for i in range(5):
+        print(i)
+        print(train_set[i])
+        print()
+
     train_sampler = None
     test_sampler = None
 
     train_loader = cycle_loader(DataLoader(
         train_set,
-        batch_size=config['training']['batch_size'] // (config['ngpus'] * config['training']['accum']),
-        sampler=train_sampler,
-        num_workers=4,
-        pin_memory=True,
+        # batch_size=config['training']['batch_size'] // (config['ngpus'] * config['training']['accum']),
+        # sampler=train_sampler,
+        # num_workers=4,
+        # pin_memory=True,
         shuffle=(train_sampler is None),
-        persistent_workers=True,
+        # persistent_workers=True,
     ))
     valid_loader = cycle_loader(DataLoader(
         valid_set,
-        batch_size=config['eval']['batch_size'] // (config['ngpus'] * config['training']['accum']),
-        sampler=test_sampler,
-        num_workers=4,
-        pin_memory=True,
+        # batch_size=config['eval']['batch_size'] // (config['ngpus'] * config['training']['accum']),
+        # sampler=test_sampler,
+        # num_workers=4,
+        # pin_memory=True,
         shuffle=(test_sampler is None),
     ))
     return train_loader, valid_loader
