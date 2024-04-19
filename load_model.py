@@ -1,10 +1,10 @@
 import os
 import torch
 from model import SEDD
-import utils
 from model.ema import ExponentialMovingAverage
 import graph_lib
 import noise_lib
+import yaml
 
 from omegaconf import OmegaConf
 
@@ -16,7 +16,8 @@ def load_model_hf(dir, device):
 
 
 def load_model_local(root_dir, device):
-    cfg = utils.load_hydra_config_from_run(root_dir)
+    with open('configs/config.yaml', 'r') as f:
+        cfg = yaml.full_load(f)
     graph = graph_lib.get_graph(cfg, device)
     noise = noise_lib.get_noise(cfg).to(device)
     score_model = SEDD(cfg).to(device)
