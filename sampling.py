@@ -3,6 +3,8 @@ import torch
 import torch.nn.functional as F
 from catsample import sample_categorical
 from tqdm import tqdm
+import os
+import shutil
 
 from model import utils as mutils
 
@@ -118,9 +120,20 @@ def get_sampling_fn(config, graph, noise, batch_dims, eps, device):
                                  device=device)
     
     return sampling_fn
-    
 
-def get_pc_sampler(graph, noise, batch_dims, predictor, steps, denoise=True, eps=1e-5, device=torch.device('cpu'), proj_fun=lambda x: x, tokenizer=None, should_print_sequential=False):
+def write_intermediate(idx, x, tokenizer, output):
+    text = tokenizer.decode(x[0].tolist())
+    with open(os.path.join(output, f"{idx}.txt"), "w") as f:
+        f.write(text)
+
+def get_pc_sampler(graph, noise, batch_dims, predictor, steps, denoise=True, eps=1e-5, device=torch.device('cpu'), proj_fun=lambda x: x, tokenizer=None, save_intermediate=None):
+    # mkdir if not exists save_intermediate
+    if save_intermediate is not None:
+        # remove dir if exists
+        if os.path.exists(save_intermediate):
+            shutil.rmtree(save_intermediate)
+        os.makedirs(save_intermediate, exist_ok=True)
+    
     predictor = get_predictor(predictor)(graph, noise)
     projector = proj_fun
     denoiser = Denoiser(graph, noise)
@@ -137,16 +150,16 @@ def get_pc_sampler(graph, noise, batch_dims, predictor, steps, denoise=True, eps
             t = timesteps[i] * torch.ones(x.shape[0], 1, device=device)
             x = projector(x)
             x = predictor.update_fn(sampling_score_fn, x, t, dt)
-            if tokenizer is not None and should_print_sequential:
-                print(tokenizer.decode(x[0].tolist()))
+            if tokenizer is not None and save_intermediate is not None:
+                write_intermediate(i, x, tokenizer, save_intermediate)
 
         if denoise:
             # denoising step
             x = projector(x)
             t = timesteps[-1] * torch.ones(x.shape[0], 1, device=device)
             x = denoiser.update_fn(sampling_score_fn, x, t)
-            if tokenizer is not None and should_print_sequential:
-                print(tokenizer.decode(x[0].tolist()))
+            if tokenizer is not None and save_intermediate is not None:
+                write_intermediate(steps, x, tokenizer, save_intermediate)
             
         return x
     

@@ -11,8 +11,9 @@ def main():
     parser.add_argument("--model_path", default="louaaron/sedd-medium", type=str)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--steps", type=int, default=1024)
-    parser.add_argument("--prefix", type=str, default="Hi, my name is")
-    parser.add_argument("--suffix", type=str, default=" and that's why I'm late.")
+    parser.add_argument("--prefix", type=str, default="")
+    parser.add_argument("--suffix", type=str, default="")
+    parser.add_argument("--save_intermediate", type=str)
     args = parser.parse_args()
 
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
@@ -40,10 +41,22 @@ def main():
     device = torch.device('cuda')
     model, graph, noise = load_model(args.model_path, device)
     
-
-    sampling_fn = sampling.get_pc_sampler(
-        graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun
-    )
+    if args.save_intermediate != None:
+        sampling_fn = sampling.get_pc_sampler(
+            graph,
+            noise,
+            (args.batch_size, 1024),
+            'analytic',
+            args.steps,
+            device=device,
+            proj_fun=proj_fun,
+            tokenizer=tokenizer,
+            save_intermediate=args.save_intermediate
+        )
+    else:
+        sampling_fn = sampling.get_pc_sampler(
+            graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun
+        )
 
     samples = proj_fun(sampling_fn(model))
 
