@@ -4,7 +4,7 @@ defaults:
   - override hydra/launcher: submitit_slurm
 
 ngpus: 1
-tokens: 59
+tokens: 103
 
 training:
   batch_size: 8
@@ -16,7 +16,7 @@ training:
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
-  output_dir: no_scaler_2048
+  output_dir: no_scaler_1024_space
 
 data:
   train: wikitext2

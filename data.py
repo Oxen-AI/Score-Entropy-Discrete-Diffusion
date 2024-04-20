@@ -171,9 +171,8 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
     # tokenizer = AutoTokenizer.from_pretrained("google/byt5-small")
     # tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
 
-    chars = string.ascii_letters # This character vocab!
     model_max_length = 2048
-    tokenizer = CharacterTokenizer(chars, model_max_length)
+    tokenizer = CharacterTokenizer(model_max_length)
 
     print(len(tokenizer.get_vocab()))
     print(tokenizer.get_vocab())
