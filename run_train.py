@@ -19,17 +19,11 @@ import noise_lib
 import utils
 from model import SEDD
 from model.ema import ExponentialMovingAverage
-from transformers import GPT2TokenizerFast, GPT2LMHeadModel
+from transformers import GPT2LMHeadModel
 import yaml
 from character_tokenizer import CharacterTokenizer
 
-
-torch.backends.cudnn.benchmark = True
-
-# def _run(rank, world_size, cfg):
-def main(rank=0, world_size=1):
-    torch.cuda.set_device(rank)
-
+def main():
     with open('configs/config.yaml', 'r') as f:
         cfg = yaml.full_load(f)
 
@@ -43,33 +37,25 @@ def main(rank=0, world_size=1):
     sample_dir = os.path.join(work_dir, "samples")
     checkpoint_dir = os.path.join(work_dir, "checkpoints")
     checkpoint_meta_dir = os.path.join(work_dir, "checkpoints-meta", "checkpoint.pth")
-    if rank == 0:
-        utils.makedirs(sample_dir)
-        utils.makedirs(checkpoint_dir)
-        utils.makedirs(os.path.dirname(checkpoint_meta_dir))
+    utils.makedirs(sample_dir)
+    utils.makedirs(checkpoint_dir)
+    utils.makedirs(os.path.dirname(checkpoint_meta_dir))
 
-    # logging
-    if rank == 0:
-        logger = utils.get_logger(os.path.join(work_dir, "logs"))
-    def mprint(msg):
-        if rank == 0:
-            print(msg)
-
-    mprint(work_dir)
-    mprint(cfg)
-    device = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
+    print(work_dir)
+    print(cfg)
+    device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
-        mprint("Found {} CUDA devices.".format(torch.cuda.device_count()))
+        print("Found {} CUDA devices.".format(torch.cuda.device_count()))
         for i in range(torch.cuda.device_count()):
             props = torch.cuda.get_device_properties(i)
-            mprint(
+            print(
                 "{} \t Memory: {:.2f}GB".format(
                     props.name, props.total_memory / (1024 ** 3)
                 )
             )
     else:
-        mprint("WARNING: Using device {}".format(device))
-    mprint(f"Found {os.cpu_count()} total number of CPUs.")
+        print("WARNING: Using device {}".format(device))
+    print(f"Found {os.cpu_count()} total number of CPUs.")
 
     # Create remote oxen repo
     repo = oxen.RemoteRepo(cfg['data']['oxen']['remote_repo'])
@@ -83,25 +69,23 @@ def main(rank=0, world_size=1):
     score_model = SEDD(cfg).to(device)
 
     num_parameters = sum(p.numel() for p in score_model.parameters())
-    mprint(f"Number of parameters in the model: {num_parameters}")
+    print(f"Number of parameters in the model: {num_parameters}")
 
     ema = ExponentialMovingAverage(
         score_model.parameters(), decay=cfg['training']['ema'])
-    mprint(score_model)
-    mprint(f"EMA: {ema}")
+    print(score_model)
+    print(f"EMA: {ema}")
 
     # build noise
     noise = noise_lib.get_noise(cfg).to(device)
     sampling_eps = 1e-5
 
-
     # build optimization state
     optimizer = losses.get_optimizer(cfg, chain(score_model.parameters(), noise.parameters()))
-    mprint(f"Optimizer: {optimizer}")
-    scaler = torch.cuda.amp.GradScaler()
-    mprint(f"Scaler: {scaler}")
-    state = dict(optimizer=optimizer, scaler=scaler, model=score_model, noise=noise, ema=ema, step=0)
+    print(f"Optimizer: {optimizer}")
+    state = dict(optimizer=optimizer, model=score_model, noise=noise, ema=ema, step=0)
 
+    # TODO: Strip out the scaler from the state dictionary and see how it performs
 
     # load in state
     state = utils.restore_checkpoint(checkpoint_meta_dir, state, device)
@@ -114,12 +98,10 @@ def main(rank=0, world_size=1):
     model_max_length = 2048
     tokenizer = CharacterTokenizer(chars, model_max_length)
 
-
-
     # Build data iterators
     train_ds, eval_ds = data.get_dataloaders(cfg)
 
-    # mprint(f"Length of datasets: {len(train_ds)}, {len(eval_ds)}")
+    # print(f"Length of datasets: {len(train_ds)}, {len(eval_ds)}")
 
     train_iter = iter(train_ds)
     eval_iter = iter(eval_ds)
@@ -135,7 +117,7 @@ def main(rank=0, world_size=1):
         sampling_fn = sampling.get_sampling_fn(cfg, graph, noise, sampling_shape, sampling_eps, device)
 
     num_train_steps = cfg['training']['n_iters']
-    mprint(f"Starting training loop at step {initial_step}.")
+    print(f"Starting training loop at step {initial_step}.")
 
     best_perplexity = float('inf')
 
@@ -154,9 +136,7 @@ def main(rank=0, world_size=1):
         # flag to see if there was movement ie a full batch got computed
         if step != state['step']:
             if step % cfg['training']['log_freq'] == 0:
-                loss /= world_size
-
-                mprint("step: %d, training_loss: %.5e" % (step, loss.item()))
+                print("step: %d, training_loss: %.5e" % (step, loss.item()))
 
             if step % cfg['training']['eval_freq'] == 0:
                 if cfg['data']['valid'] != "text8":
@@ -165,16 +145,14 @@ def main(rank=0, world_size=1):
                     eval_batch = next(train_iter).to(device)
                 eval_loss = eval_step_fn(state, eval_batch)
 
-                eval_loss /= world_size
-
                 if step > 0:
-                    mprint("step: %d, evaluation_loss: %.5e" % (step, eval_loss.item()))
+                    print("step: %d, evaluation_loss: %.5e" % (step, eval_loss.item()))
                     run.track(eval_loss.item(), name='loss', step=state['step'], context={ "subset":"eval" })
 
             if step > 0 and step % cfg['training']['snapshot_freq'] == 0 or step == num_train_steps:
                 # Generate and save samples
                 if cfg['training']['snapshot_sampling']:
-                    mprint(f"Generating text at step: {step}")
+                    print(f"Generating text at step: {step}")
 
                     this_sample_dir = os.path.join(sample_dir, "iter_{}".format(step))
                     utils.makedirs(this_sample_dir)
@@ -186,11 +164,10 @@ def main(rank=0, world_size=1):
 
                     sentences = tokenizer.batch_decode(sample)
 
-                    file_name = os.path.join(this_sample_dir, f"sample_{rank}.txt")
+                    file_name = os.path.join(this_sample_dir, f"sample.txt")
                     with open(file_name, 'w') as file:
                         for sentence in sentences:
                             file.write(sentence + "\n")
-                            file.write("============================================================================================\n")
                     repo.add(file_name)
                     repo.commit(f"Sample at step {step}")
 
@@ -206,8 +183,7 @@ def main(rank=0, world_size=1):
                             perplexity = F.cross_entropy(logits[..., :-1], s[..., 1:], reduction="none").mean(dim=-1).exp().mean()
                             total_perplexity += perplexity
                         total_perplexity /= batches
-                        total_perplexity /= world_size
-                        mprint(f"Generative Perplexity at step: {step}. Perplexity: {total_perplexity:.3f}.")
+                        print(f"Generative Perplexity at step: {step}. Perplexity: {total_perplexity:.3f}.")
 
                         run.track(total_perplexity, name='perplexity', step=state['step'], context={ "subset":"eval" })
 

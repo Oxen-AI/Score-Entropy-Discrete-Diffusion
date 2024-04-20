@@ -53,14 +53,12 @@ def optimization_manager(config):
     """Returns an optimize_fn based on `config`."""
 
     def optimize_fn(optimizer, 
-                    scaler, 
                     params, 
                     step, 
                     lr=config['optim']['lr'],
                     warmup=config['optim']['warmup'],
                     grad_clip=config['optim']['grad_clip']):
         """Optimizes with warmup and gradient clipping (disabled if negative)."""
-        scaler.unscale_(optimizer)
 
         if warmup > 0:
             for g in optimizer.param_groups:
@@ -68,8 +66,7 @@ def optimization_manager(config):
         if grad_clip >= 0:
             torch.nn.utils.clip_grad_norm_(params, max_norm=grad_clip)
 
-        scaler.step(optimizer)
-        scaler.update()
+        optimizer.step()
 
     return optimize_fn
 
@@ -88,10 +85,9 @@ def get_step_fn(noise, graph, train, optimize_fn, accum):
 
         if train:
             optimizer = state['optimizer']
-            scaler = state['scaler']
             loss = loss_fn(model, batch, cond=cond).mean() / accum
             
-            scaler.scale(loss).backward()
+            loss.backward()
 
             accum_iter += 1
             total_loss += loss.detach()
@@ -99,7 +95,7 @@ def get_step_fn(noise, graph, train, optimize_fn, accum):
                 accum_iter = 0
 
                 state['step'] += 1
-                optimize_fn(optimizer, scaler, model.parameters(), step=state['step'])
+                optimize_fn(optimizer, model.parameters(), step=state['step'])
                 state['ema'].update(model.parameters())
                 optimizer.zero_grad()
                 

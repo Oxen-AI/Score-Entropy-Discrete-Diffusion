@@ -221,6 +221,9 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
 
         return tokens
     
+    # filter out short strings
+    data = data.filter(lambda x: len(x['text']) > 10)
+    # tokenize the dataset
     tokenized_dataset = data.map(preprocess_and_tokenize, batched=True, num_proc=num_proc, load_from_cache_file=True)
     if name == "ptb":
         tokenized_dataset = tokenized_dataset.remove_columns('sentence')
