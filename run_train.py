@@ -62,6 +62,10 @@ def main():
     if not repo.exists():
         repo.create()
 
+    # Save config file for this run
+    repo.add('configs/config.yaml')
+    repo.commit("Added config file")
+
     # build token graph
     graph = graph_lib.get_graph(cfg, device)
 

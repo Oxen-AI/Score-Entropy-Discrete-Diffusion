@@ -16,14 +16,14 @@ training:
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
-  output_dir: no_scaler_2
+  output_dir: no_scaler_2048
 
 data:
   train: wikitext2
   valid: lambada
   cache_dir: data
   oxen:
-    remote_repo: ox/Score-Entropy-Discrete-Diffusion-No-Scaler-2
+    remote_repo: ox/Score-Entropy-Discrete-Diffusion-No-Scaler-Length-2048
 
 model:
   name: small
@@ -31,8 +31,8 @@ model:
   hidden_size: 1024
   cond_dim: 128
   length: 2048
-  n_blocks: 12
-  n_heads: 12
+  n_blocks: 16
+  n_heads: 16
   scale_by_sigma: True
   dropout: 0.1
 
