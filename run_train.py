@@ -97,10 +97,8 @@ def main():
 
     # load in tokenizer
     # tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-    import string
-    chars = string.ascii_letters # This character vocab!
     model_max_length = 2048
-    tokenizer = CharacterTokenizer(chars, model_max_length)
+    tokenizer = CharacterTokenizer(model_max_length)
 
     # Build data iterators
     train_ds, eval_ds = data.get_dataloaders(cfg)

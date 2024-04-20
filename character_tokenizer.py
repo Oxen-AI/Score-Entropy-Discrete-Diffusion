@@ -4,6 +4,7 @@ This is heavily inspired from CanineTokenizer in transformers package.
 """
 import json
 import os
+import string
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Union
 
@@ -11,7 +12,7 @@ from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 class CharacterTokenizer(PreTrainedTokenizer):
-    def __init__(self, characters: Sequence[str], model_max_length: int, **kwargs):
+    def __init__(self, model_max_length: int, **kwargs):
         """Character tokenizer for Hugging Face transformers.
 
         Args:
@@ -30,7 +31,8 @@ class CharacterTokenizer(PreTrainedTokenizer):
 
             model_max_length (int): Model maximum sequence length.
         """
-        self.characters = characters
+        self.characters = list(string.ascii_letters) + [' '] + list(string.digits) + list(string.punctuation) + ['\n']
+        print(f"Characters: {self.characters}")
         self.model_max_length = model_max_length
         bos_token = AddedToken("[BOS]", lstrip=False, rstrip=False)
         eos_token = AddedToken("[SEP]", lstrip=False, rstrip=False)
@@ -50,7 +52,7 @@ class CharacterTokenizer(PreTrainedTokenizer):
             "[PAD]": 4,
             "[RESERVED]": 5,
             "[UNK]": 6,
-            **{ch: i + 7 for i, ch in enumerate(characters)},
+            **{ch: i + 7 for i, ch in enumerate(self.characters)},
         }
         self._vocab_int_to_str = {v: k for k, v in self._vocab_str_to_int.items()}
 
