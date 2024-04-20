@@ -194,6 +194,7 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
         if detokenizer is not None:
             text = _apply_detokenizer(detokenizer)(text)
 
+        text = text[:model_max_length]
         tokens = tokenizer(text, return_attention_mask=False)
         # add in EOS token following 
         # https://github.com/jcpeterson/openwebtext/blob/master/tokenize_text.py#L67
