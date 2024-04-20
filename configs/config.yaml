@@ -7,7 +7,7 @@ ngpus: 1
 tokens: 59
 
 training:
-  batch_size: 16
+  batch_size: 512
   accum: 1
   n_iters: 1300001
   snapshot_freq: 1000
@@ -16,14 +16,14 @@ training:
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
-  output_dir: wikitext2
+  output_dir: no_scaler_2
 
 data:
   train: wikitext2
   valid: lambada
   cache_dir: data
   oxen:
-    remote_repo: ox/Score-Entropy-Discrete-Diffusion-WikiText2
+    remote_repo: ox/Score-Entropy-Discrete-Diffusion-No-Scaler-2
 
 graph:
   type: absorb
@@ -43,7 +43,7 @@ sampling:
 eval:
   batch_size: 16
   perplexity: True
-  perplexity_batch_size: 4
+  perplexity_batch_size: 32
 
 optim:
   weight_decay: 0
@@ -60,7 +60,7 @@ model:
   type: ddit
   hidden_size: 768
   cond_dim: 128
-  length: 1024
+  length: 32
   n_blocks: 12
   n_heads: 12
   scale_by_sigma: True
