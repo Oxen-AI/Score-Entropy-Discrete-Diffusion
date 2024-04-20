@@ -7,7 +7,7 @@ ngpus: 1
 tokens: 59
 
 training:
-  batch_size: 4
+  batch_size: 8
   accum: 1
   n_iters: 1300001
   snapshot_freq: 1000
@@ -23,14 +23,14 @@ data:
   valid: lambada
   cache_dir: data
   oxen:
-    remote_repo: ox/Score-Entropy-Discrete-Diffusion-No-Scaler-Length-2048
+    remote_repo: ox/Score-Entropy-Discrete-Diffusion-No-Scaler-Length-1024
 
 model:
   name: small
   type: ddit
   hidden_size: 1024
   cond_dim: 128
-  length: 2048
+  length: 1024
   n_blocks: 16
   n_heads: 16
   scale_by_sigma: True
@@ -54,7 +54,7 @@ sampling:
 eval:
   batch_size: 16
   perplexity: True
-  perplexity_batch_size: 32
+  perplexity_batch_size: 4
 
 optim:
   weight_decay: 0
