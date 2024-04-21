@@ -23,9 +23,27 @@ from transformers import GPT2LMHeadModel
 import yaml
 from character_tokenizer import CharacterTokenizer
 
+import argparse
+from sedd.datasets.ox_dataset import OxDataset
+from sedd.tokenizers.ox_tokenizer import OxTokenizer
+from torch.utils.data import DataLoader
+
 def main():
-    with open('configs/config.yaml', 'r') as f:
+    args = argparse.ArgumentParser(description="Train SEDD")
+    args.add_argument("--config", type=str, default="configs/config.yaml")
+    args.add_argument("--output", type=str, default="output")
+    args.add_argument("--oxen_repo", type=str, default="ox/SEDD_dev")
+    args = args.parse_args()
+    
+    # load in tokenizer
+    tokenizer = OxTokenizer()
+
+    with open(args.config, 'r') as f:
         cfg = yaml.full_load(f)
+
+    cfg['tokens'] = tokenizer.vocab_size
+    cfg['data']['remote_repo'] = args.oxen_repo
+    cfg['training']['output_dir'] = args.output
 
     print(cfg)
 
@@ -58,7 +76,7 @@ def main():
     print(f"Found {os.cpu_count()} total number of CPUs.")
 
     # Create remote oxen repo
-    repo = oxen.RemoteRepo(cfg['data']['oxen']['remote_repo'])
+    repo = oxen.RemoteRepo(cfg['data']['remote_repo'])
     if not repo.exists():
         repo.create()
 
@@ -95,15 +113,13 @@ def main():
     state = utils.restore_checkpoint(checkpoint_meta_dir, state, device)
     initial_step = int(state['step'])
 
-    # load in tokenizer
-    # tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-    model_max_length = 2048
-    tokenizer = CharacterTokenizer(model_max_length)
-
     # Build data iterators
-    train_ds, eval_ds = data.get_dataloaders(cfg)
+    # train_ds, eval_ds = data.get_dataloaders(cfg)
 
     # print(f"Length of datasets: {len(train_ds)}, {len(eval_ds)}")
+
+    train_ds = DataLoader(OxDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    eval_ds = DataLoader(OxDataset(tokenizer, num_examples=cfg['training']['n_iters']))
 
     train_iter = iter(train_ds)
     eval_iter = iter(eval_ds)
@@ -115,7 +131,7 @@ def main():
 
 
     if cfg['training']['snapshot_sampling']:
-        sampling_shape = (cfg['training']['batch_size'] // (cfg['ngpus'] * cfg['training']['accum']), cfg['model']['length'])
+        sampling_shape = (cfg['training']['batch_size'] // (cfg['training']['accum']), cfg['model']['length'])
         sampling_fn = sampling.get_sampling_fn(cfg, graph, noise, sampling_shape, sampling_eps, device)
 
     num_train_steps = cfg['training']['n_iters']
@@ -126,11 +142,7 @@ def main():
     while state['step'] < num_train_steps + 1:
         step = state['step']
 
-
-        if cfg['data']['train'] != "text8":
-            batch = next(train_iter)['input_ids'].to(device)
-        else:
-            batch = next(train_iter).to(device)
+        batch = next(train_iter).to(device)
         loss = train_step_fn(state, batch)
 
         run.track(loss.item(), name='loss', step=state['step'], context={ "subset":"train" })
@@ -141,10 +153,7 @@ def main():
                 print("step: %d, training_loss: %.5e" % (step, loss.item()))
 
             if step % cfg['training']['eval_freq'] == 0:
-                if cfg['data']['valid'] != "text8":
-                    eval_batch = next(eval_iter)['input_ids'].to(device)
-                else:
-                    eval_batch = next(train_iter).to(device)
+                eval_batch = next(eval_iter).to(device)
                 eval_loss = eval_step_fn(state, eval_batch)
 
                 if step > 0:
@@ -170,6 +179,7 @@ def main():
                     with open(file_name, 'w') as file:
                         for sentence in sentences:
                             file.write(sentence + "\n")
+                            file.write("="*80 + "\n")
                     repo.add(file_name)
                     repo.commit(f"Sample at step {step}")
 

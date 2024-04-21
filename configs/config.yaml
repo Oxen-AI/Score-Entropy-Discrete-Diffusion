@@ -1,36 +1,26 @@
-defaults:
-  - _self_
-  - model: small
-  - override hydra/launcher: submitit_slurm
-
-ngpus: 1
-tokens: 103
 
 training:
   batch_size: 8
   accum: 1
   n_iters: 1300001
   snapshot_freq: 1000
+  eval_freq: 1000
   log_freq: 50
-  eval_freq: 500
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
-  output_dir: no_scaler_1024_space
 
 data:
   train: wikitext2
   valid: lambada
-  cache_dir: data
-  oxen:
-    remote_repo: ox/Score-Entropy-Discrete-Diffusion-No-Scaler-Length-1024
+  cache_dir: _data
 
 model:
   name: small
   type: ddit
-  hidden_size: 1024
+  hidden_size: 512
   cond_dim: 128
-  length: 1024
+  length: 32
   n_blocks: 16
   n_heads: 16
   scale_by_sigma: True
@@ -65,19 +55,3 @@ optim:
   eps: 0.00000001
   warmup: 2500
   grad_clip: 1.
-
-hydra:
-  run:
-    dir: exp_local/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
-  sweep:
-    dir: exp/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
-    subdir: ${hydra.job.num}
-  launcher:
-    max_num_timeout: 100000
-    # timeout_min: 10079
-    partition: g40x
-    account: stanford
-    mem_gb: 96
-    cpus_per_task: 40
-    gpus_per_node: ${ngpus}
-    constraint: null
