@@ -24,6 +24,7 @@ import yaml
 import argparse
 from sedd.datasets.ox_dataset import OxDataset
 from sedd.datasets.brown_cow_dataset import BrownCowDataset
+from sedd.datasets.wikipedia_dataset import WikipediaDataset
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
 from sedd.tokenizers.abc_tokenizer import ABCTokenizer
 from sedd.models.sedd import SEDD
@@ -115,16 +116,18 @@ def main():
 
     # print(f"Length of datasets: {len(train_ds)}, {len(eval_ds)}")
 
-    train_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
-    eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    # train_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    # eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    
+    train_ds = DataLoader(WikipediaDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=128))
 
     train_iter = iter(train_ds)
     eval_iter = iter(eval_ds)
 
     # Build one-step training and evaluation functions
-    optimize_fn = losses.optimization_manager(cfg)
-    train_step_fn = losses.get_step_fn(noise, graph, True, optimize_fn, cfg['training']['accum'])
-    eval_step_fn = losses.get_step_fn(noise, graph, False, optimize_fn, cfg['training']['accum'])
+    train_step_fn = losses.get_step_fn(noise, graph, True, cfg)
+    eval_step_fn = losses.get_step_fn(noise, graph, False, cfg)
 
     if cfg['training']['snapshot_sampling']:
         sampling_shape = (cfg['training']['batch_size'] // (cfg['training']['accum']), cfg['model']['length'])

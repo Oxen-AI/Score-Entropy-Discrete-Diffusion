@@ -180,43 +180,15 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
     EOS = tokenizer.encode(tokenizer.eos_token)[0]
 
     def preprocess_and_tokenize(example):
-        # print(example)
-        if name == "ptb":
-            text = example['sentence']
-        elif name.startswith("baby_names"):
-            text = example["Names"]
-        else:
-            text = example["text"]
-        # print(list(example.keys()))
-        # exit()
-        
-        if detokenizer is not None:
-            text = _apply_detokenizer(detokenizer)(text)
-
+        text = example["text"]
         text = text[:model_max_length]
         tokens = tokenizer(text, return_attention_mask=False)
-        # add in EOS token following 
-        # https://github.com/jcpeterson/openwebtext/blob/master/tokenize_text.py#L67
-        # for token in tokens['input_ids']:
-        #     token.append(EOS)
-
-        # print(block_size)
-        # print(len(tokens))
-        # print(tokens)
-
         # Pad batch to block_size
         for i in range(len(tokens['input_ids'])):
             if len(tokens['input_ids'][i]) < block_size:
                 tokens['input_ids'][i] = tokens['input_ids'][i] + [EOS] * (block_size - len(tokens['input_ids'][i]))
             else:
                 tokens['input_ids'][i] = tokens['input_ids'][i][:block_size]
-            
-        # while len(tokens['input_ids']) < block_size:
-        #     tokens['input_ids'].append(EOS)
-
-        # # Truncate text to block_size
-        # if len(tokens['input_ids']) > block_size:
-        #     tokens['input_ids'] = tokens['input_ids'][:block_size]
 
         return tokens
     

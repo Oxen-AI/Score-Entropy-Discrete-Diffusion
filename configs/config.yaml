@@ -2,7 +2,7 @@
 training:
   batch_size: 8
   accum: 1
-  n_iters: 100000
+  n_iters: 1000000
   snapshot_freq: 1000
   eval_freq: 1000
   log_freq: 50
@@ -18,11 +18,11 @@ data:
 model:
   name: small
   type: ddit
-  hidden_size: 256
+  hidden_size: 1024
   cond_dim: 128
-  length: 32
-  n_blocks: 4
-  n_heads: 4
+  length: 1024
+  n_blocks: 16
+  n_heads: 16
   scale_by_sigma: True
   dropout: 0.1
 
