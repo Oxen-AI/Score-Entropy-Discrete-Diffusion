@@ -96,18 +96,13 @@ def get_step_fn(noise, graph, train, optimize_fn, accum):
 
                 state['step'] += 1
                 optimize_fn(optimizer, model.parameters(), step=state['step'])
-                state['ema'].update(model.parameters())
                 optimizer.zero_grad()
                 
                 loss = total_loss
                 total_loss = 0
         else:
             with torch.no_grad():
-                ema = state['ema']
-                ema.store(model.parameters())
-                ema.copy_to(model.parameters())
                 loss = loss_fn(model, batch, cond=cond).mean()
-                ema.restore(model.parameters())
 
         return loss
 

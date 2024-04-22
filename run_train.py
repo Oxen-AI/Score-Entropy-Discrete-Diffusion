@@ -17,32 +17,34 @@ import sampling
 import graph_lib
 import noise_lib
 import utils
-from model import SEDD
-from model.ema import ExponentialMovingAverage
 from transformers import GPT2LMHeadModel
 import yaml
-from character_tokenizer import CharacterTokenizer
+
 
 import argparse
 from sedd.datasets.ox_dataset import OxDataset
+from sedd.datasets.brown_cow_dataset import BrownCowDataset
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
+from sedd.tokenizers.abc_tokenizer import ABCTokenizer
+from sedd.models.sedd import SEDD
 from torch.utils.data import DataLoader
 
 def main():
     args = argparse.ArgumentParser(description="Train SEDD")
     args.add_argument("--config", type=str, default="configs/config.yaml")
     args.add_argument("--output", type=str, default="output")
-    args.add_argument("--oxen_repo", type=str, default="ox/SEDD_dev")
+    args.add_argument("--repo", type=str, default="ox/SEDD_dev")
     args = args.parse_args()
     
     # load in tokenizer
-    tokenizer = OxTokenizer()
+    # tokenizer = OxTokenizer()
+    tokenizer = ABCTokenizer()
 
     with open(args.config, 'r') as f:
         cfg = yaml.full_load(f)
 
     cfg['tokens'] = tokenizer.vocab_size
-    cfg['data']['remote_repo'] = args.oxen_repo
+    cfg['data']['remote_repo'] = args.repo
     cfg['training']['output_dir'] = args.output
 
     print(cfg)
@@ -93,11 +95,6 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    ema = ExponentialMovingAverage(
-        score_model.parameters(), decay=cfg['training']['ema'])
-    print(score_model)
-    print(f"EMA: {ema}")
-
     # build noise
     noise = noise_lib.get_noise(cfg).to(device)
     sampling_eps = 1e-5
@@ -105,7 +102,7 @@ def main():
     # build optimization state
     optimizer = losses.get_optimizer(cfg, chain(score_model.parameters(), noise.parameters()))
     print(f"Optimizer: {optimizer}")
-    state = dict(optimizer=optimizer, model=score_model, noise=noise, ema=ema, step=0)
+    state = dict(optimizer=optimizer, model=score_model, noise=noise, step=0)
 
     # TODO: Strip out the scaler from the state dictionary and see how it performs
 
@@ -118,8 +115,8 @@ def main():
 
     # print(f"Length of datasets: {len(train_ds)}, {len(eval_ds)}")
 
-    train_ds = DataLoader(OxDataset(tokenizer, num_examples=cfg['training']['n_iters']))
-    eval_ds = DataLoader(OxDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    train_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
 
     train_iter = iter(train_ds)
     eval_iter = iter(eval_ds)
@@ -128,7 +125,6 @@ def main():
     optimize_fn = losses.optimization_manager(cfg)
     train_step_fn = losses.get_step_fn(noise, graph, True, optimize_fn, cfg['training']['accum'])
     eval_step_fn = losses.get_step_fn(noise, graph, False, optimize_fn, cfg['training']['accum'])
-
 
     if cfg['training']['snapshot_sampling']:
         sampling_shape = (cfg['training']['batch_size'] // (cfg['training']['accum']), cfg['model']['length'])
@@ -168,11 +164,7 @@ def main():
                     this_sample_dir = os.path.join(sample_dir, "iter_{}".format(step))
                     utils.makedirs(this_sample_dir)
 
-                    ema.store(score_model.parameters())
-                    ema.copy_to(score_model.parameters())
                     sample = sampling_fn(score_model)
-                    ema.restore(score_model.parameters())
-
                     sentences = tokenizer.batch_decode(sample)
 
                     file_name = os.path.join(this_sample_dir, f"sample.txt")
