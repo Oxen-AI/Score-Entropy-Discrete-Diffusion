@@ -18,11 +18,11 @@ data:
 model:
   name: small
   type: ddit
-  hidden_size: 1024
+  hidden_size: 256
   cond_dim: 128
-  length: 1024
-  n_blocks: 16
-  n_heads: 16
+  length: 32
+  n_blocks: 4
+  n_heads: 4
   scale_by_sigma: True
   dropout: 0.1
 

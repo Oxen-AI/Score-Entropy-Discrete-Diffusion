@@ -25,9 +25,11 @@ import argparse
 from sedd.datasets.ox_dataset import OxDataset
 from sedd.datasets.brown_cow_dataset import BrownCowDataset
 from sedd.datasets.wikipedia_dataset import WikipediaDataset
+from sedd.datasets.abc_dataset import ABCDataset
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
 from sedd.tokenizers.abc_tokenizer import ABCTokenizer
 from sedd.models.sedd import SEDD
+# from sedd.models.simple_sedd import SEDD
 from torch.utils.data import DataLoader
 
 def main():
@@ -119,8 +121,8 @@ def main():
     # train_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
     # eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
     
-    train_ds = DataLoader(WikipediaDataset(tokenizer, num_examples=cfg['training']['n_iters']))
-    eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=128))
+    train_ds = DataLoader(ABCDataset(tokenizer, num_examples=cfg['training']['n_iters']))
+    eval_ds = DataLoader(ABCDataset(tokenizer, num_examples=128))
 
     train_iter = iter(train_ds)
     eval_iter = iter(eval_ds)
