@@ -4,6 +4,8 @@ from datasets import load_dataset
 import torch
 import os
 from tqdm import tqdm
+from datasets import Dataset as HFDataset
+
 
 class OpenSubtitlesDataset(Dataset):
     def __init__(self, tokenizer, train=True, num_examples=-1, seq_len=32, num_proc=8):
@@ -28,8 +30,9 @@ class OpenSubtitlesDataset(Dataset):
         # Add sequential texts together with newlines
         data = []
         for i in tqdm(range(len(self.dataset)-1)):
-            data.append({"text": self.dataset[i]['text'] + "\n" + self.dataset[i+1]['text']})
+            data.append(self.dataset[i]['text'] + "\n" + self.dataset[i+1]['text'])
         
+        data = HFDataset.from_dict({"text": data})
         def preprocess_and_tokenize(example):
             global max_len
             text = example["text"]

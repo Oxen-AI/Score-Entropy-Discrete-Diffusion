@@ -21,7 +21,7 @@ class Sampler:
         sampling_eps = 1e-5
         cfg = self.cfg
 
-        batch_size = cfg['training']['batch_size']
+        batch_size = cfg['eval']['batch_size']
         context_length = cfg['model']['length']
         sampling_shape = (batch_size, context_length)
         sampling_fn = get_sampling_fn(cfg, graph, noise, sampling_shape, sampling_eps, self.device)

@@ -3,9 +3,10 @@ from .loss import step_fn
 import torch.optim as optim
 from itertools import chain
 import os
+import utils
 
 class Trainer:
-    def __init__(self, run, model, graph, noise, config, eval_callback=None, sample_callback=None, device='cuda'):
+    def __init__(self, run, model, graph, noise, config, eval_callback=None, sample_callback=None, device='cuda', checkpoint_dir='checkpoints'):
         self.graph = graph
         self.model = model
         self.noise = noise
@@ -13,6 +14,7 @@ class Trainer:
         self.eval_callback = eval_callback
         self.sample_callback = sample_callback
         self.device = device
+        self.checkpoint_dir = checkpoint_dir
         self.run = run
 
     def train(self, dataset):
@@ -58,6 +60,9 @@ class Trainer:
         if step % cfg['training']['eval_freq'] == 0:
             if self.eval_callback is not None:
                 self.eval_callback(state)
+                
+        if step % cfg['training']['snapshot_freq'] == 0:
+            utils.save_checkpoint(os.path.join(self.checkpoint_dir, f'checkpoint.pth'), state)
 
         if step > 0 and step % cfg['training']['snapshot_freq'] == 0:
             # Generate and save samples

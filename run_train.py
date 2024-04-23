@@ -100,7 +100,7 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']))
+    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
     eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
     noise = LogLinearNoise().to(device)
@@ -124,7 +124,8 @@ def main():
         cfg,
         eval_callback=eval,
         sample_callback=sample,
-        device=device
+        device=device,
+        checkpoint_dir=checkpoint_dir
     )
     trainer.train(train_ds)
 
