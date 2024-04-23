@@ -1,37 +1,30 @@
-import datetime
+
 import os
 import os.path
-import gc
 import yaml
 import oxen
 
-import numpy as np
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
-
-import data
-import losses
-import sampling
-import graph_lib
-import noise_lib
 import utils
-from transformers import GPT2LMHeadModel
 import yaml
 
 
 import argparse
 from sedd.datasets.ox_dataset import OxDataset
 from sedd.datasets.brown_cow_dataset import BrownCowDataset
-from sedd.datasets.wikipedia_dataset import WikipediaDataset
+from sedd.datasets.wikitext2_dataset import Wikitext2Dataset
+from sedd.datasets.open_subtitles_dataset import OpenSubtitlesDataset
 from sedd.datasets.abc_dataset import ABCDataset
+
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
 from sedd.tokenizers.abc_tokenizer import ABCTokenizer
 from sedd.models.noise import LogLinearNoise
-from sedd.models.sedd import SEDD
+from sedd.models.simple_sedd import SEDD
 from sedd.models.sampler import Sampler
+from sedd.models.graph import AbsorbingGraph
 from sedd.trainer.trainer import Trainer
 from sedd.eval.evaluator import Evaluator
+
 from aim import Run
 
 # from sedd.models.simple_sedd import SEDD
@@ -67,6 +60,7 @@ def main():
         cfg = yaml.full_load(f)
 
     cfg['tokens'] = tokenizer.vocab_size
+    cfg['data'] = {}
     cfg['data']['remote_repo'] = args.repo
     cfg['training']['output_dir'] = args.output
 
@@ -98,7 +92,7 @@ def main():
     repo.commit("Added config file")
 
     # build token graph
-    graph = graph_lib.get_graph(cfg, device)
+    graph = AbsorbingGraph(tokenizer.vocab_size)
 
     # build score model
     score_model = SEDD(cfg).to(device)
@@ -106,16 +100,8 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    # load in state
-    # state = utils.restore_checkpoint(checkpoint_meta_dir, state, device)
-    # initial_step = int(state['step'])
-
-    train_ds = DataLoader(ABCDataset(tokenizer, num_examples=cfg['training']['n_iters']))
-    eval_ds = DataLoader(ABCDataset(tokenizer, num_examples=128))
-
-    # Build one-step training and evaluation functions
-    # train_step_fn = losses.get_step_fn(noise, graph, True, cfg)
-    # eval_step_fn = losses.get_step_fn(noise, graph, False, cfg)
+    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']))
+    eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
     noise = LogLinearNoise().to(device)
 

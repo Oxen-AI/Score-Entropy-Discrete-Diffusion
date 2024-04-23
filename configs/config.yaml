@@ -11,26 +11,13 @@ training:
   snapshot_sampling: True
   ema: 0.9999
 
-data:
-  train: wikitext2
-  valid: lambada
-  cache_dir: _data
-
 model:
-  name: small
-  type: ddit
-  hidden_size: 256
+  hidden_size: 1024
   cond_dim: 128
-  length: 32
-  n_blocks: 4
-  n_heads: 4
-  scale_by_sigma: True
+  length: 256
+  n_blocks: 24
+  n_heads: 16
   dropout: 0.1
-
-graph:
-  type: absorb
-  file: data
-  report_all: False
 
 noise:
   type: loglinear
@@ -49,7 +36,6 @@ eval:
 
 optim:
   weight_decay: 0
-  optimizer: AdamW
   lr: 0.0001
   beta1: 0.9
   beta2: 0.999

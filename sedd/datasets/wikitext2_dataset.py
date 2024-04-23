@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 from datasets import load_dataset
 import torch
 
-class WikipediaDataset(Dataset):
+class Wikitext2Dataset(Dataset):
     def __init__(self, tokenizer, num_examples, cache_dir="./data", seq_len=32, num_proc=8):
         self.tokenizer = tokenizer
         self.seq_len = seq_len
@@ -26,9 +26,7 @@ class WikipediaDataset(Dataset):
             return tokens
         
         self.dataset = data.map(preprocess_and_tokenize, batched=True, num_proc=num_proc, load_from_cache_file=True)
-        
         print(self.dataset)
-        
         # self.dataset = tokenized_dataset.with_format('torch')
 
     def __len__(self):
