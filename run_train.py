@@ -19,7 +19,8 @@ from sedd.datasets.abc_dataset import ABCDataset
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
 from sedd.tokenizers.abc_tokenizer import ABCTokenizer
 from sedd.models.noise import LogLinearNoise
-from sedd.models.simple_sedd import SEDD
+# from sedd.models.simple_sedd import SEDD
+from sedd.models.sedd import SEDD
 from sedd.models.sampler import Sampler
 from sedd.models.graph import AbsorbingGraph
 from sedd.trainer.trainer import Trainer
@@ -100,8 +101,11 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
-    eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
+    # train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    # eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
+
+    train_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    eval_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
     noise = LogLinearNoise().to(device)
 

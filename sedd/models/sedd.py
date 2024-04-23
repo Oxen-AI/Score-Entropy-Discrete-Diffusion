@@ -281,8 +281,7 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
 
         self.config = config
 
-        self.absorb = config['graph']['type'] == "absorb"
-        vocab_size = config['tokens'] + (1 if self.absorb else 0)
+        vocab_size = config['tokens'] + 1
 
         self.vocab_embed = EmbeddingLayer(config['model']['hidden_size'], vocab_size)
         self.sigma_map = TimestepEmbedder(config['model']['cond_dim'])
@@ -293,7 +292,6 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
         ])
 
         self.output_layer = DDitFinalLayer(config['model']['hidden_size'], vocab_size, config['model']['cond_dim'])
-        self.scale_by_sigma = config['model']['scale_by_sigma']
 
     
     def _get_bias_dropout_scale(self):
@@ -320,10 +318,8 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
             x = self.output_layer(x, c)
 
 
-        if self.scale_by_sigma:
-            assert self.absorb, "Haven't configured this to work."
-            esigm1_log = torch.where(sigma < 0.5, torch.expm1(sigma), sigma.exp() - 1).log().to(x.dtype)[:, None, None]
-            x = x - esigm1_log - np.log(x.shape[-1] - 1)# this will be approximately averaged at 0
+        esigm1_log = torch.where(sigma < 0.5, torch.expm1(sigma), sigma.exp() - 1).log().to(x.dtype)[:, None, None]
+        x = x - esigm1_log - np.log(x.shape[-1] - 1)# this will be approximately averaged at 0
             
         x = torch.scatter(x, -1, indices[..., None], torch.zeros_like(x[..., :1]))
 
