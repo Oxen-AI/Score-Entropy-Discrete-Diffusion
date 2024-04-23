@@ -3,6 +3,7 @@ training:
   batch_size: 8
   accum: 1
   n_iters: 1000000
+  n_epochs: 100
   snapshot_freq: 1000
   eval_freq: 1000
   log_freq: 50

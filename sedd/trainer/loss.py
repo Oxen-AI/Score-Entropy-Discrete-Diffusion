@@ -1,8 +1,5 @@
 import torch
-import torch.optim as optim
-import torch.nn.functional as F
 import numpy as np
-import graph_lib
 from model import utils as mutils
 
 def score_fn(model, x, sigma, train=True, sampling=False):
@@ -35,8 +32,7 @@ def loss_fn(batch, model, noise, graph, train=True, t=None, perturbed_batch=None
     if perturbed_batch is None:
         perturbed_batch = graph.sample_transition(batch, sigma[:, None])
 
-    log_score_fn = mutils.get_score_fn(model, train=train, sampling=False)
-    log_score = log_score_fn(perturbed_batch, sigma)
+    log_score = score_fn(model, perturbed_batch, sigma, train=train, sampling=False)
     loss = graph.score_entropy(log_score, sigma[:, None], perturbed_batch, batch)
 
     loss = (dsigma[:, None] * loss).sum(dim=-1)

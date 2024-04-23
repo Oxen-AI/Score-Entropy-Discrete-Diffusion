@@ -2,14 +2,13 @@ import datetime
 import os
 import os.path
 import gc
-from itertools import chain
 import yaml
-from aim import Run
 import oxen
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.optim as optim
 
 import data
 import losses
@@ -28,9 +27,30 @@ from sedd.datasets.wikipedia_dataset import WikipediaDataset
 from sedd.datasets.abc_dataset import ABCDataset
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
 from sedd.tokenizers.abc_tokenizer import ABCTokenizer
+from sedd.models.noise import LogLinearNoise
 from sedd.models.sedd import SEDD
+from sedd.models.sampler import Sampler
+from sedd.trainer.trainer import Trainer
+from sedd.eval.evaluator import Evaluator
+from aim import Run
+
 # from sedd.models.simple_sedd import SEDD
 from torch.utils.data import DataLoader
+
+def print_devices(device):
+    if torch.cuda.is_available():
+        print("Found {} CUDA devices.".format(torch.cuda.device_count()))
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            print(
+                "{} \t Memory: {:.2f}GB".format(
+                    props.name, props.total_memory / (1024 ** 3)
+                )
+            )
+    else:
+        print("WARNING: Using device {}".format(device))
+    print(f"Using device: {device}")
+    print(f"Found {os.cpu_count()} total number of CPUs.")
 
 def main():
     args = argparse.ArgumentParser(description="Train SEDD")
@@ -53,8 +73,6 @@ def main():
     print(cfg)
 
     work_dir = cfg['training']['output_dir']
-    run = Run()
-    run["hparams"] = cfg
 
     # Create directories for experimental logs
     sample_dir = os.path.join(work_dir, "samples")
@@ -66,19 +84,9 @@ def main():
 
     print(work_dir)
     print(cfg)
+
     device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
-    if device.type == "cuda":
-        print("Found {} CUDA devices.".format(torch.cuda.device_count()))
-        for i in range(torch.cuda.device_count()):
-            props = torch.cuda.get_device_properties(i)
-            print(
-                "{} \t Memory: {:.2f}GB".format(
-                    props.name, props.total_memory / (1024 ** 3)
-                )
-            )
-    else:
-        print("WARNING: Using device {}".format(device))
-    print(f"Found {os.cpu_count()} total number of CPUs.")
+    print_devices(device)
 
     # Create remote oxen repo
     repo = oxen.RemoteRepo(cfg['data']['remote_repo'])
@@ -98,116 +106,41 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    # build noise
-    noise = noise_lib.get_noise(cfg).to(device)
-    sampling_eps = 1e-5
-
-    # build optimization state
-    optimizer = losses.get_optimizer(cfg, chain(score_model.parameters(), noise.parameters()))
-    print(f"Optimizer: {optimizer}")
-    state = dict(optimizer=optimizer, model=score_model, noise=noise, step=0)
-
-    # TODO: Strip out the scaler from the state dictionary and see how it performs
-
     # load in state
-    state = utils.restore_checkpoint(checkpoint_meta_dir, state, device)
-    initial_step = int(state['step'])
+    # state = utils.restore_checkpoint(checkpoint_meta_dir, state, device)
+    # initial_step = int(state['step'])
 
-    # Build data iterators
-    # train_ds, eval_ds = data.get_dataloaders(cfg)
-
-    # print(f"Length of datasets: {len(train_ds)}, {len(eval_ds)}")
-
-    # train_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
-    # eval_ds = DataLoader(BrownCowDataset(tokenizer, num_examples=cfg['training']['n_iters']))
-    
     train_ds = DataLoader(ABCDataset(tokenizer, num_examples=cfg['training']['n_iters']))
     eval_ds = DataLoader(ABCDataset(tokenizer, num_examples=128))
 
-    train_iter = iter(train_ds)
-    eval_iter = iter(eval_ds)
-
     # Build one-step training and evaluation functions
-    train_step_fn = losses.get_step_fn(noise, graph, True, cfg)
-    eval_step_fn = losses.get_step_fn(noise, graph, False, cfg)
+    # train_step_fn = losses.get_step_fn(noise, graph, True, cfg)
+    # eval_step_fn = losses.get_step_fn(noise, graph, False, cfg)
 
-    if cfg['training']['snapshot_sampling']:
-        sampling_shape = (cfg['training']['batch_size'] // (cfg['training']['accum']), cfg['model']['length'])
-        sampling_fn = sampling.get_sampling_fn(cfg, graph, noise, sampling_shape, sampling_eps, device)
+    noise = LogLinearNoise().to(device)
 
-    num_train_steps = cfg['training']['n_iters']
-    print(f"Starting training loop at step {initial_step}.")
-
-    best_perplexity = float('inf')
-
-    while state['step'] < num_train_steps + 1:
-        step = state['step']
-
-        batch = next(train_iter).to(device)
-        loss = train_step_fn(state, batch)
-
-        run.track(loss.item(), name='loss', step=state['step'], context={ "subset":"train" })
-
-        # flag to see if there was movement ie a full batch got computed
-        if step != state['step']:
-            if step % cfg['training']['log_freq'] == 0:
-                print("step: %d, training_loss: %.5e" % (step, loss.item()))
-
-            if step % cfg['training']['eval_freq'] == 0:
-                eval_batch = next(eval_iter).to(device)
-                eval_loss = eval_step_fn(state, eval_batch)
-
-                if step > 0:
-                    print("step: %d, evaluation_loss: %.5e" % (step, eval_loss.item()))
-                    run.track(eval_loss.item(), name='loss', step=state['step'], context={ "subset":"eval" })
-
-            if step > 0 and step % cfg['training']['snapshot_freq'] == 0 or step == num_train_steps:
-                # Generate and save samples
-                if cfg['training']['snapshot_sampling']:
-                    print(f"Generating text at step: {step}")
-
-                    this_sample_dir = os.path.join(sample_dir, "iter_{}".format(step))
-                    utils.makedirs(this_sample_dir)
-
-                    sample = sampling_fn(score_model)
-                    sentences = tokenizer.batch_decode(sample)
-
-                    file_name = os.path.join(this_sample_dir, f"sample.txt")
-                    with open(file_name, 'w') as file:
-                        for sentence in sentences:
-                            file.write(sentence + "\n")
-                            file.write("="*80 + "\n")
-                    repo.add(file_name)
-                    repo.commit(f"Sample at step {step}")
-
-                if cfg['eval']['perplexity']:
-                    with torch.no_grad():
-                        eval_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(device).eval()
-                        batches = sample.shape[0] // cfg['eval']['perplexity_batch_size']
-                        total_perplexity = 0
-                        for i in range(batches):
-                            s = sample[i * cfg['eval']['perplexity_batch_size']:(i + 1) * cfg['eval']['perplexity_batch_size']]
-                            loss, logits = eval_model(s, labels=s)[:2]
-                            logits = logits.transpose(-1, -2)
-                            perplexity = F.cross_entropy(logits[..., :-1], s[..., 1:], reduction="none").mean(dim=-1).exp().mean()
-                            total_perplexity += perplexity
-                        total_perplexity /= batches
-                        print(f"Generative Perplexity at step: {step}. Perplexity: {total_perplexity:.3f}.")
-
-                        run.track(total_perplexity, name='perplexity', step=state['step'], context={ "subset":"eval" })
-
-                        del eval_model, logits, loss
-
-                        if best_perplexity < total_perplexity:
-                            best_perplexity = total_perplexity
-                            # write best perplexity to file
-                            with open(os.path.join(work_dir, "best_perplexity.txt"), 'w') as file:
-                                file.write(f"Best Perplexity: {best_perplexity:.3f} at step {step}.")
-                            # save best model
-                            utils.save_checkpoint(os.path.join(checkpoint_dir, f'checkpoint_best.pth'), state)
-                        else:
-                            # save latest model
-                            utils.save_checkpoint(os.path.join(checkpoint_dir, f'checkpoint_latest.pth'), state)
+    run = Run()
+    run["hparams"] = cfg
+    
+    def eval(state):
+        evaluator = Evaluator(eval_ds, run, cfg, device=device)
+        return evaluator.evaluate(state)
+    
+    def sample(state):
+        sampler = Sampler(tokenizer, sample_dir, cfg)
+        return sampler.sample(state)
+        
+    trainer = Trainer(
+        run,
+        score_model,
+        graph,
+        noise,
+        cfg,
+        eval_callback=eval,
+        sample_callback=sample,
+        device=device
+    )
+    trainer.train(train_ds)
 
 
 if __name__ == "__main__":
