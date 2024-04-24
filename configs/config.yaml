@@ -12,11 +12,11 @@ training:
   ema: 0.9999
 
 model:
-  hidden_size: 256
+  hidden_size: 1024
   cond_dim: 128
   length: 32
-  n_blocks: 4
-  n_heads: 4
+  n_blocks: 24
+  n_heads: 16
   dropout: 0.1
 
 noise:

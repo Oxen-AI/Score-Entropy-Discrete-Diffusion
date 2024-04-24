@@ -48,7 +48,7 @@ def print_devices(device):
 
 def main():
     args = argparse.ArgumentParser(description="Train SEDD")
-    args.add_argument("--config", type=str, default="configs/config.yaml")
+    args.add_argument("--cfg", type=str, default="configs/config.yaml")
     args.add_argument("--output", type=str, default="output")
     args.add_argument("--repo", type=str, default="ox/SEDD_dev")
     args = args.parse_args()
@@ -57,7 +57,7 @@ def main():
     # tokenizer = OxTokenizer()
     tokenizer = ABCTokenizer()
 
-    with open(args.config, 'r') as f:
+    with open(args.cfg, 'r') as f:
         cfg = yaml.full_load(f)
 
     cfg['tokens'] = tokenizer.vocab_size
@@ -101,11 +101,11 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    # train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
-    # eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
+    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
-    train_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
-    eval_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
+    # train_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    # eval_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
     noise = LogLinearNoise().to(device)
 
@@ -117,8 +117,20 @@ def main():
         return evaluator.evaluate(state)
     
     def sample(state):
+        step = state['step']
         sampler = Sampler(tokenizer, sample_dir, cfg)
-        return sampler.sample(state)
+        texts = sampler.sample(state)
+
+        file_name = os.path.join(sample_dir, f"sample.txt")
+        with open(file_name, 'w') as file:
+            for sentence in texts:
+                file.write(sentence + "\n")
+                file.write("="*80 + "\n")
+
+        # Push samples to Oxen.ai for tracking
+        repo = oxen.RemoteRepo(cfg['data']['remote_repo'])
+        repo.add(file_name)
+        repo.commit(f"Sample at step {step}")
         
     trainer = Trainer(
         run,

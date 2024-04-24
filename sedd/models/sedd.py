@@ -272,7 +272,7 @@ class DDitFinalLayer(nn.Module):
 
 
 class SEDD(nn.Module, PyTorchModelHubMixin):
-    def __init__(self, config):
+    def __init__(self, config, vocab_size):
         super().__init__()
 
         # hack to make loading in configs easier
@@ -281,7 +281,7 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
 
         self.config = config
 
-        vocab_size = config['tokens'] + 1
+        vocab_size = vocab_size + 1 # absorbing state
 
         self.vocab_embed = EmbeddingLayer(config['model']['hidden_size'], vocab_size)
         self.sigma_map = TimestepEmbedder(config['model']['cond_dim'])

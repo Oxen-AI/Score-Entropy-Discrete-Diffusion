@@ -1,33 +1,46 @@
+import os
 import torch
 import argparse
-
-from load_model import load_model
+import yaml
 from transformers import GPT2TokenizerFast
-import torch.nn.functional as F
-import sampling
 
+from sedd.models.sedd import SEDD
+from sedd.models.graph import AbsorbingGraph
+from sedd.models.noise import LogLinearNoise
+from sedd.models.sampler import Sampler
 
 def main():
     parser = argparse.ArgumentParser(description="Generate some samples")
-    parser.add_argument("--model_path", default="louaaron/sedd-medium", type=str)
-    parser.add_argument("--dataset", default="wikitext103", type=str)
-    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--model", type=str, required=True)
+    parser.add_argument("--tokenizer", default="gpt2", type=str)
     parser.add_argument("--steps", type=int, default=1024)
     args = parser.parse_args()
-
     
-    device = torch.device('cuda')
-    model, graph, noise = load_model(args.model_path, device)
+    # Config should be saved in the model directory
+    cfg = os.path.join(args.model, 'config.yaml')
+    with open(cfg, 'r') as f:
+        cfg = yaml.full_load(f)
+
+    # Load the tokenizer
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
 
-    sampling_fn = sampling.get_pc_sampler(
-        graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device
-    )
+    # Load the model onto GPU
+    device = torch.device('cuda')
+    model = SEDD(cfg, tokenizer.vocab_size).to(device)
+    model_file = os.path.join(args.model, "checkpoint.pth")
+    loaded_state = torch.load(model_file, map_location=device)
+    model.load_state_dict(loaded_state)
 
-    samples = sampling_fn(model)
+    # Load the transition graph
+    graph = AbsorbingGraph(tokenizer.vocab_size)
+    
+    # Load the noise function
+    noise = LogLinearNoise().to(device)
 
-    text_samples = tokenizer.batch_decode(samples)
-    for i in text_samples:
+    sampler = Sampler(cfg, device=device)
+    texts = sampler.sample(tokenizer, model, graph, noise, steps=args.steps)
+
+    for i in texts:
         print(i)
         print("=================================================")
 
