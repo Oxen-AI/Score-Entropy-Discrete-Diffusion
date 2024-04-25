@@ -40,6 +40,7 @@ def main():
     print("Load model: ", args.model_path)
     device = torch.device('cuda')
     model, graph, noise = load_model(args.model_path, device)
+<<<<<<< HEAD:run_sample_cond.py
     
     if args.save_intermediate != None:
         sampling_fn = sampling.get_pc_sampler(
@@ -57,6 +58,12 @@ def main():
         sampling_fn = sampling.get_pc_sampler(
             graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun
         )
+=======
+
+    sampling_fn = sampling.get_pc_sampler(
+        graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun
+    )
+>>>>>>> cleanup:scripts/run_sample_cond.py
 
     samples = proj_fun(sampling_fn(model))
 

@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
+
 import numpy as np
 import math
 
@@ -10,7 +12,6 @@ from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
 from huggingface_hub import PyTorchModelHubMixin
 from omegaconf import OmegaConf
 
-from . import rotary
 from .fused_add_dropout_scale import (
     bias_dropout_add_scale_fused_train, 
     bias_dropout_add_scale_fused_inference, 
@@ -23,6 +24,75 @@ def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
+class Rotary(torch.nn.Module):
+    def __init__(self, dim, base=10_000):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self.seq_len_cached = None
+        self.cos_cached = None
+        self.sin_cached = None
+
+    def forward(self, x, seq_dim=1):
+        seq_len = x.shape[seq_dim]
+        if seq_len != self.seq_len_cached:
+            self.seq_len_cached = seq_len
+            t = torch.arange(x.shape[seq_dim], device=x.device).type_as(self.inv_freq)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq.clone())
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            # dims are: batch, seq_len, qkv, head, dim
+            self.cos_cached = emb.cos()[None, :, None, None, :].repeat(1,1,3,1,1)
+            self.sin_cached = emb.sin()[None, :, None, None, :].repeat(1,1,3,1,1)
+            # This makes the transformation on v an identity.
+            self.cos_cached[:,:,2,:,:].fill_(1.)
+            self.sin_cached[:,:,2,:,:].fill_(0.)
+
+        return self.cos_cached, self.sin_cached
+
+
+def rotate_half(x):
+    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
+    return torch.cat(
+        (-x2, x1), dim=-1
+    )
+
+
+@torch.jit.script
+def _apply_rotary_pos_emb_torchscript(qkv, cos, sin):
+    return (qkv * cos) + (rotate_half(qkv) * sin)
+
+
+def apply_rotary_pos_emb(qkv, cos, sin):
+    try:
+        import flash_attn.layers.rotary
+        cos = cos[0,:,0,0,:cos.shape[-1]//2]
+        sin = sin[0,:,0,0,:sin.shape[-1]//2]
+        return flash_attn.layers.rotary.apply_rotary_emb_qkv_(
+            qkv, cos, sin
+        )
+    except:
+        return _apply_rotary_pos_emb_torchscript(qkv, cos, sin)
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Arguments:
+            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
 
 #################################################################################
 #                                  Layers                                       #
@@ -117,27 +187,31 @@ class LabelEmbedder(nn.Module):
 
 class DDiTBlock(nn.Module):
 
-    def __init__(self, dim, n_heads, cond_dim, mlp_ratio=4, dropout=0.1):
+    def __init__(self, n_embd, n_heads, cond_dim, mlp_ratio=4, dropout=0.1):
         super().__init__()
+
+        assert n_embd % n_heads == 0
+
         self.n_heads = n_heads
-
-        self.norm1 = LayerNorm(dim)
-        self.attn_qkv = nn.Linear(dim, 3 * dim, bias=False)
-        self.attn_out = nn.Linear(dim, dim, bias=False)
-        self.dropout1 = nn.Dropout(dropout)
-
-        self.norm2 = LayerNorm(dim)
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, mlp_ratio * dim, bias=True),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(mlp_ratio * dim, dim, bias=True)
-        )
-        self.dropout2 = nn.Dropout(dropout)
-
+        self.n_embd = n_embd
         self.dropout = dropout
-        
 
-        self.adaLN_modulation = nn.Linear(cond_dim, 6 * dim, bias=True)
+        # Attention
+        self.norm1 = LayerNorm(n_embd)
+        self.attn_qkv = nn.Linear(n_embd, 3 * n_embd, bias=False)
+        self.attn_out = nn.Linear(n_embd, n_embd, bias=False)
+        self.attn_dropout = nn.Dropout(dropout)
+        self.resid_dropout = nn.Dropout(dropout)
+
+        # MLP
+        self.norm2 = LayerNorm(n_embd)
+        self.mlp = nn.Sequential(
+            nn.Linear(n_embd, mlp_ratio * n_embd, bias=True),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(mlp_ratio * n_embd, n_embd, bias=True)
+        )
+
+        self.adaLN_modulation = nn.Linear(cond_dim, 6 * n_embd, bias=True)
         self.adaLN_modulation.weight.data.zero_()
         self.adaLN_modulation.bias.data.zero_()
 
@@ -150,43 +224,35 @@ class DDiTBlock(nn.Module):
         )
 
 
-    def forward(self, x, rotary_cos_sin, c, seqlens=None):
-        batch_size, seq_len = x.shape[0], x.shape[1]
+    def forward(self, x, timestamp):
+        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-        bias_dropout_scale_fn = self._get_bias_dropout_scale()
+        # Integrate the sigma timestamp information
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(timestamp)[:, None].chunk(6, dim=2)
 
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c)[:, None].chunk(6, dim=2)
-
-        # attention operation
         x_skip = x
-        x = modulate_fused(self.norm1(x), shift_msa, scale_msa)
-        # dtype0 = x.dtype
+        x = modulate_fused(self.norm1(x), shift_msa, scale_msa) * gate_msa
 
-        qkv = self.attn_qkv(x)
-        qkv = rearrange(qkv, 'b s (three h d) -> b s three h d', three=3, h=self.n_heads)
-        with torch.cuda.amp.autocast(enabled=False):
-            cos, sin = rotary_cos_sin
-            qkv = rotary.apply_rotary_pos_emb(
-                qkv, cos.to(qkv.dtype), sin.to(qkv.dtype)
-            )
-        qkv = rearrange(qkv, 'b s ... -> (b s) ...')
-        if seqlens is None:
-            cu_seqlens = torch.arange(
-                0, (batch_size + 1) * seq_len, step=seq_len,
-                dtype=torch.int32, device=qkv.device
-            )
-        else:
-            cu_seqlens = seqlens.cumsum(-1)
-        x = flash_attn_varlen_qkvpacked_func(
-            qkv, cu_seqlens, seq_len, 0., causal=False)
-        
-        x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        q, k, v  = self.attn_qkv(x).split(self.n_embd, dim=2)
+        k = k.view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
+        q = q.view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
+        v = v.view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
 
-        x = bias_dropout_scale_fn(self.attn_out(x), None, gate_msa, x_skip, self.dropout)
+        # manual implementation of attention
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        att = F.softmax(att, dim=-1)
+        att = self.attn_dropout(att)
+        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
 
-        # mlp operation
-        x = bias_dropout_scale_fn(self.mlp(modulate_fused(self.norm2(x), shift_mlp, scale_mlp)), None, gate_mlp, x, self.dropout)
-        return x
+        # re-assemble all head outputs side by side
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+
+        # output projection
+        y = self.attn_out(y)
+        y = modulate_fused(self.norm2(y), shift_mlp, scale_mlp) * gate_mlp
+        y = self.resid_dropout(y + x_skip)
+        return y
 
 
 
@@ -228,25 +294,29 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
     def __init__(self, config):
         super().__init__()
 
+        hidden_size = config['model']['hidden_size']
+        cond_dim = config['model']['cond_dim']
+        n_heads = config['model']['n_heads']
+        dropout = config['model']['dropout']
+        n_blocks = config['model']['n_blocks']
+
         # hack to make loading in configs easier
         if type(config) == dict:
             config = OmegaConf.create(config)
 
         self.config = config
 
-        self.absorb = config['graph']['type'] == "absorb"
-        vocab_size = config['tokens'] + (1 if self.absorb else 0)
+        vocab_size = config['tokens'] + 1 # for absorbing state
 
-        self.vocab_embed = EmbeddingLayer(config['model']['hidden_size'], vocab_size)
-        self.sigma_map = TimestepEmbedder(config['model']['cond_dim'])
-        self.rotary_emb = rotary.Rotary(config['model']['hidden_size'] // config['model']['n_heads'])
+        self.vocab_embed = EmbeddingLayer(hidden_size, vocab_size)
+        self.timestamp_embed = TimestepEmbedder(cond_dim)
+        self.postional_embed = PositionalEncoding(hidden_size)
 
         self.blocks = nn.ModuleList([
-            DDiTBlock(config['model']['hidden_size'], config['model']['n_heads'], config['model']['cond_dim'], dropout=config['model']['dropout']) for _ in range(config['model']['n_blocks'])
+            DDiTBlock(hidden_size, n_heads, cond_dim, dropout=dropout) for _ in range(n_blocks)
         ])
 
-        self.output_layer = DDitFinalLayer(config['model']['hidden_size'], vocab_size, config['model']['cond_dim'])
-        self.scale_by_sigma = config['model']['scale_by_sigma']
+        self.output_layer = DDitFinalLayer(hidden_size, vocab_size, cond_dim)
 
     
     def _get_bias_dropout_scale(self):
@@ -258,25 +328,25 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
 
 
     def forward(self, indices, sigma):
-        # print("indices")
-        # print(indices)
-        # print(indices.shape)
         x = self.vocab_embed(indices)
-        c = F.silu(self.sigma_map(sigma))
+        timestamp = F.silu(self.timestamp_embed(sigma))
+        
+        # print("x.shape")
+        # print(x.shape)
+        # print("c.shape")
+        # print(c.shape)
 
-        rotary_cos_sin = self.rotary_emb(x)
+        x = self.postional_embed(x)
 
         with torch.cuda.amp.autocast(dtype=torch.bfloat16):
             for i in range(len(self.blocks)):
-                x = self.blocks[i](x, rotary_cos_sin, c, seqlens=None)
+                x = self.blocks[i](x, timestamp)
 
-            x = self.output_layer(x, c)
+            x = self.output_layer(x, timestamp)
 
 
-        if self.scale_by_sigma:
-            assert self.absorb, "Haven't configured this to work."
-            esigm1_log = torch.where(sigma < 0.5, torch.expm1(sigma), sigma.exp() - 1).log().to(x.dtype)[:, None, None]
-            x = x - esigm1_log - np.log(x.shape[-1] - 1)# this will be approximately averaged at 0
+        esigm1_log = torch.where(sigma < 0.5, torch.expm1(sigma), sigma.exp() - 1).log().to(x.dtype)[:, None, None]
+        x = x - esigm1_log - np.log(x.shape[-1] - 1)# this will be approximately averaged at 0
             
         x = torch.scatter(x, -1, indices[..., None], torch.zeros_like(x[..., :1]))
 
