@@ -301,26 +301,26 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
             else bias_dropout_add_scale_fused_inference
         )
 
-
     def forward(self, indices, sigma):
-        # print("indices")
-        # print(indices)
-        # print(indices.shape)
+        # Compute embeddings
         x = self.vocab_embed(indices)
         c = F.silu(self.sigma_map(sigma))
-
         rotary_cos_sin = self.rotary_emb(x)
 
+        # Run transformer blocks
         with torch.cuda.amp.autocast(dtype=torch.bfloat16):
             for i in range(len(self.blocks)):
                 x = self.blocks[i](x, rotary_cos_sin, c, seqlens=None)
 
             x = self.output_layer(x, c)
 
-
+        # Not sure exactly what this is doing...but has to do with scale_by_sigma and absorbing state
         esigm1_log = torch.where(sigma < 0.5, torch.expm1(sigma), sigma.exp() - 1).log().to(x.dtype)[:, None, None]
+
         x = x - esigm1_log - np.log(x.shape[-1] - 1)# this will be approximately averaged at 0
-            
+
+        # Put the absorbing state in the last position (zeros)
         x = torch.scatter(x, -1, indices[..., None], torch.zeros_like(x[..., :1]))
 
+        # Shape: [batch_size, seq_len, vocab_size]
         return x

@@ -1,7 +1,7 @@
 import abc
 import torch
 import torch.nn.functional as F
-from catsample import sample_categorical
+from sedd.models.catsample import sample_categorical
 from tqdm import tqdm
 
 from model import utils as mutils

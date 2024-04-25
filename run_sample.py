@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate some samples")
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--tokenizer", default="gpt2", type=str)
+    parser.add_argument("--show_intermediate", action='store_true')
     parser.add_argument("--steps", type=int, default=1024)
     args = parser.parse_args()
     
@@ -38,11 +39,12 @@ def main():
     noise = LogLinearNoise().to(device)
 
     sampler = Sampler(cfg, device=device)
-    texts = sampler.sample(tokenizer, model, graph, noise, steps=args.steps)
+    texts = sampler.sample(tokenizer, model, graph, noise, steps=args.steps, show_intermediate=args.show_intermediate)
 
     for i in texts:
+        print("="*80)
         print(i)
-        print("=================================================")
+        print("="*80)
 
 if __name__=="__main__":
     main()

@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import custom_fwd, custom_bwd
 
 
-from catsample import sample_categorical
+from sedd.models.catsample import sample_categorical
 
 def get_graph(config, device):
     if config['graph']['type'] == "uniform":
