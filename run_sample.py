@@ -24,6 +24,10 @@ def main():
 
     # Load the tokenizer
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    
+    print("Vocab size: ", tokenizer.vocab_size)
+    print("Last token in vocab: ", tokenizer.decode([tokenizer.vocab_size-1]))
+    print("Past vocab size: ", tokenizer.batch_decode([[tokenizer.vocab_size]]))
 
     # Load the model onto GPU
     device = torch.device('cuda')

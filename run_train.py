@@ -19,12 +19,12 @@ from sedd.datasets.abc_dataset import ABCDataset
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
 from sedd.tokenizers.abc_tokenizer import ABCTokenizer
 from sedd.models.noise import LogLinearNoise
-# from sedd.models.simple_sedd import SEDD
 from sedd.models.sedd import SEDD
 from sedd.models.sampler import Sampler
 from sedd.models.graph import AbsorbingGraph
 from sedd.trainer.trainer import Trainer
 from sedd.eval.evaluator import Evaluator
+from transformers import GPT2TokenizerFast
 
 from aim import Run
 
@@ -55,7 +55,9 @@ def main():
     
     # load in tokenizer
     # tokenizer = OxTokenizer()
-    tokenizer = ABCTokenizer()
+    # tokenizer = ABCTokenizer()
+    tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    tokenizer.pad_token = tokenizer.eos_token # make sure we pad with eos token
 
     with open(args.cfg, 'r') as f:
         cfg = yaml.full_load(f)
@@ -96,12 +98,12 @@ def main():
     graph = AbsorbingGraph(tokenizer.vocab_size)
 
     # build score model
-    score_model = SEDD(cfg).to(device)
+    score_model = SEDD(cfg, tokenizer.vocab_size).to(device)
 
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10_000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
     eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
     # train_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
@@ -118,8 +120,12 @@ def main():
     
     def sample(state):
         step = state['step']
-        sampler = Sampler(tokenizer, sample_dir, cfg)
-        texts = sampler.sample(state)
+        model = state['model']
+        graph = state['graph']
+        noise = state['noise']
+        
+        sampler = Sampler(sample_dir, cfg)
+        texts = sampler.sample(tokenizer, model, graph, noise)
 
         file_name = os.path.join(sample_dir, f"sample.txt")
         with open(file_name, 'w') as file:

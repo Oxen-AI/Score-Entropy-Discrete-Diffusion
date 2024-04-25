@@ -1,11 +1,9 @@
 import torch
 import torch.nn.functional as F
 
-
 def gumbel_softmax(categorical_probs, hard=False, eps=1e-9):
     logits = categorical_probs.clamp(min=1e-9).log()
     return F.gumbel_softmax(logits, hard=hard)
-
 
 def sample_categorical(categorical_probs, method="hard"):
     if method == "hard":

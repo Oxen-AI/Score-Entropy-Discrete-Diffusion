@@ -39,7 +39,6 @@ def main():
     print("Load model: ", args.model_path)
     device = torch.device('cuda')
     model, graph, noise = load_model(args.model_path, device)
-    
 
     sampling_fn = sampling.get_pc_sampler(
         graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun

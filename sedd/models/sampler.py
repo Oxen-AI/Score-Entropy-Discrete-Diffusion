@@ -4,12 +4,8 @@ import torch
 from tqdm import tqdm
 
 from sedd.models.catsample import sample_categorical
-
-def score_fn(model, x, sigma):
-    sigma = sigma.reshape(-1)
-    score = model(x, sigma)
-    # when sampling return true score (not log used for training)
-    return score.exp()
+# from sedd.models.sedd import score_fn
+from model.utils import get_score_fn
 
 class Predictor(abc.ABC):
     """The abstract class for a predictor algorithm."""
@@ -38,8 +34,11 @@ class EulerPredictor(Predictor):
         sigma, dsigma = self.noise(t)
         
         # torch.Size([1, 1024, 50258])
-        score = score_fn(model, x, sigma)
+        score_fn = get_score_fn(model, train=False, sampling=True)
+        score = score_fn(x, sigma)
+        # score = score_fn(model, x, sigma, train=False)
         rev_rate = step_size * dsigma[..., None] * self.graph.reverse_rate(x, score)
+        # TODO: What does sample_rate do?
         x = self.graph.sample_rate(x, rev_rate)
         return x
 
@@ -51,7 +50,11 @@ class Denoiser:
     def update_fn(self, model, x, t):
         sigma = self.noise(t)[0]
 
-        score = score_fn(model, x, sigma)
+        score_fn = get_score_fn(model, train=False, sampling=True)
+        score = score_fn(x, sigma)
+        # score = score_fn(model, x, sigma, train=False)
+
+        # TODO: What do these do?
         stag_score = self.graph.staggered_score(score, sigma)
         probs = stag_score * self.graph.transp_transition(x, sigma)
         # truncate probabilities
@@ -93,9 +96,10 @@ class Sampler:
             x = projector(x)
             x = predictor.update_fn(model, x, t, dt)
             if show_intermediate:
+                print(f"{i} @ {timesteps[i].item()}:")
+                print(x)
                 sentences = tokenizer.batch_decode(x)
                 for sentence in sentences:
-                    print(f"{i}:")
                     print(sentence[:100] + "...")
 
         if denoise:

@@ -54,4 +54,5 @@ class OpenSubtitlesDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        return torch.Tensor(self.dataset[idx]['input_ids']).long()
+        item = self.dataset[idx]['input_ids']
+        return torch.Tensor(item).long()

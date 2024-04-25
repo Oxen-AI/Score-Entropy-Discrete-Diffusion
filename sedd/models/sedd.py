@@ -324,3 +324,19 @@ class SEDD(nn.Module, PyTorchModelHubMixin):
 
         # Shape: [batch_size, seq_len, vocab_size]
         return x
+
+def score_fn(model, x, sigma, train=True, sampling=False):
+    sigma = sigma.reshape(-1)
+    
+    if train:
+        model.train()
+    else:
+        model.eval()
+
+    score = model(x, sigma)
+    
+    if sampling:
+        # when sampling return true score (not log used for training)
+        return score.exp()
+
+    return score

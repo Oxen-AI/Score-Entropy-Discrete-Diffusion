@@ -1,22 +1,6 @@
 import torch
 import numpy as np
-from model import utils as mutils
-
-def score_fn(model, x, sigma, train=True, sampling=False):
-    sigma = sigma.reshape(-1)
-    
-    if train:
-        model.train()
-    else:
-        model.eval()
-
-    score = model(x, sigma)
-    
-    if sampling:
-        # when sampling return true score (not log used for training)
-        return score.exp()
-        
-    return score
+from sedd.models.sedd import score_fn
 
 def loss_fn(batch, model, noise, graph, train=True, t=None, perturbed_batch=None):
     """

@@ -62,7 +62,7 @@ class Trainer:
                 self.eval_callback(state)
                 
         if step % cfg['training']['snapshot_freq'] == 0:
-            utils.save_checkpoint(os.path.join(self.checkpoint_dir, f'checkpoint.pth'), state)
+            utils.save_checkpoint(os.path.join(self.checkpoint_dir, f'checkpoint.pth'), state, cfg)
 
         if step > 0 and step % cfg['training']['snapshot_freq'] == 0:
             # Generate and save samples

@@ -18,6 +18,8 @@ def main():
     shifted_tokens = (tokens + args.num_shift) % tokenizer.vocab_size
     print(f"Got shifted tokens:\n{shifted_tokens}\n")
     
+    # TODO: Sample with sampler at different times and like training
+    
     # Decode the shifted tokens
     shifted_text = tokenizer.decode(shifted_tokens[0])
     print(f"Shifted text:\n{shifted_text}")

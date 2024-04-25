@@ -3,7 +3,7 @@ import torch
 import os
 import logging
 from omegaconf import OmegaConf, open_dict
-
+import yaml
 
 def load_hydra_config_from_run(load_dir):
     cfg_path = os.path.join(load_dir, ".hydra/config.yaml")
@@ -59,10 +59,15 @@ def restore_checkpoint(ckpt_dir, state, device):
         return state
 
 
-def save_checkpoint(ckpt_dir, state):
+def save_checkpoint(ckpt_dir, state, cfg):
     saved_state = {
         'optimizer': state['optimizer'].state_dict(),
         'model': state['model'].state_dict(),
         'step': state['step']
     }
     torch.save(saved_state, ckpt_dir)
+    
+    # write yaml file with yaml library
+    cfg_path = os.path.join(os.path.dirname(ckpt_dir), "config.yaml")
+    with open(cfg_path, "w") as f:
+        yaml.dump(cfg, f)

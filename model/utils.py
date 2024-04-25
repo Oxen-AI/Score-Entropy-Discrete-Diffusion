@@ -41,6 +41,9 @@ def get_score_fn(model, train=False, sampling=False):
         assert not train, "Must sample in eval mode"
     model_fn = get_model_fn(model, train=train)
 
+    # This is apparently very important to use 
+    # 'torch.cuda.amp.autocast(dtype=torch.bfloat16)'
+    # for the score function, gives garbage otherwise
     with torch.cuda.amp.autocast(dtype=torch.bfloat16):
         def score_fn(x, sigma):
             sigma = sigma.reshape(-1)
