@@ -23,9 +23,11 @@ def main():
     
     graph = AbsorbingGraph(tokenizer.vocab_size)
     noise = LogLinearNoise()
+    
+    # Sample noise at timestep
     t = torch.ones(1) * args.timestep
     sigma, _ = noise(t)
-    
+
     print(f"Got noise: {sigma.item()}\n")
     print(sigma[:, None])
     

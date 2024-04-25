@@ -137,11 +137,11 @@ class AbsorbingGraph(Graph):
 
     def sample_transition(self, i, sigma):
         move_chance = 1 - (-sigma).exp()
-        # print("move_chance", move_chance)
+        print("move_chance", move_chance)
         move_indices = torch.rand(*i.shape, device=i.device) < move_chance
-        # print("move_indices", move_indices)
+        print("move_indices", move_indices)
         i_pert = torch.where(move_indices, self.dim - 1, i)
-        # print("i_pert", i_pert)
+        print("i_pert", i_pert)
         return i_pert
     
     def staggered_score(self, score, dsigma):

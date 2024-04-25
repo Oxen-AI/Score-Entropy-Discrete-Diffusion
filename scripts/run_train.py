@@ -5,7 +5,6 @@ import yaml
 import oxen
 
 import torch
-import utils
 import yaml
 
 
@@ -52,7 +51,7 @@ def main():
     args.add_argument("--output", type=str, default="output")
     args.add_argument("--repo", type=str, default="ox/SEDD_dev")
     args = args.parse_args()
-    
+
     # load in tokenizer
     # tokenizer = OxTokenizer()
     # tokenizer = ABCTokenizer()
@@ -75,9 +74,9 @@ def main():
     sample_dir = os.path.join(work_dir, "samples")
     checkpoint_dir = os.path.join(work_dir, "checkpoints")
     checkpoint_meta_dir = os.path.join(work_dir, "checkpoints-meta", "checkpoint.pth")
-    utils.makedirs(sample_dir)
-    utils.makedirs(checkpoint_dir)
-    utils.makedirs(os.path.dirname(checkpoint_meta_dir))
+    os.makedirs(sample_dir, exist_ok=True)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(checkpoint_meta_dir), exist_ok=True)
 
     print(work_dir)
     print(cfg)
@@ -113,19 +112,19 @@ def main():
 
     run = Run()
     run["hparams"] = cfg
-    
+
     def eval(state):
         evaluator = Evaluator(eval_ds, run, cfg, device=device)
         return evaluator.evaluate(state)
-    
+
     def sample(state):
         step = state['step']
         model = state['model']
         graph = state['graph']
         noise = state['noise']
-        
-        sampler = Sampler(sample_dir, cfg)
-        texts = sampler.sample(tokenizer, model, graph, noise)
+
+        sampler = Sampler(cfg)
+        texts = sampler.sample(tokenizer, model, graph, noise, steps=128)
 
         file_name = os.path.join(sample_dir, f"sample.txt")
         with open(file_name, 'w') as file:
@@ -137,7 +136,7 @@ def main():
         repo = oxen.RemoteRepo(cfg['data']['remote_repo'])
         repo.add(file_name)
         repo.commit(f"Sample at step {step}")
-        
+
     trainer = Trainer(
         run,
         score_model,

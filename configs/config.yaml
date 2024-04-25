@@ -3,7 +3,7 @@ training:
   batch_size: 1
   accum: 1
   n_iters: 1000000
-  n_epochs: 100
+  n_epochs: 1000
   snapshot_freq: 1000
   eval_freq: 1000
   log_freq: 50
@@ -14,7 +14,7 @@ training:
 model:
   hidden_size: 1024
   cond_dim: 128
-  length: 32
+  length: 1024
   n_blocks: 24
   n_heads: 16
   dropout: 0.1
