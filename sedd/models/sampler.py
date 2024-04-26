@@ -4,8 +4,7 @@ import torch
 from tqdm import tqdm
 
 from sedd.models.catsample import sample_categorical
-# from sedd.models.sedd import score_fn
-from model.utils import get_score_fn
+from sedd.models.utils import get_score_fn
 
 class Predictor(abc.ABC):
     """The abstract class for a predictor algorithm."""
@@ -32,7 +31,7 @@ class Predictor(abc.ABC):
 class EulerPredictor(Predictor):
     def update_fn(self, model, x, t, step_size):
         sigma, dsigma = self.noise(t)
-        
+
         # torch.Size([1, 1024, 50258])
         score_fn = get_score_fn(model, train=False, sampling=True)
         score = score_fn(x, sigma)
@@ -60,7 +59,7 @@ class Denoiser:
         # truncate probabilities
         if self.graph.absorb:
             probs = probs[..., :-1]
-        
+
         #return probs.argmax(dim=-1)
         return sample_categorical(probs)
 
@@ -72,19 +71,19 @@ class Sampler:
     def sample(self, tokenizer, model, graph, noise, batch_size=1, steps=1024, eps=1e-5, denoise=True, projector = lambda x: x, show_intermediate=False):
         cfg = self.cfg
         device = self.device
-        
+
         predictor = EulerPredictor(graph, noise)
         denoiser = Denoiser(graph, noise)
 
         batch_dims = (batch_size, cfg['model']['length'])
 
         # This is a batch_size, seq_len tensor that starts at the limit
-        # so in this case it is 
+        # so in this case it is
         #   (self.dim - 1) * torch.ones(*batch_dims, dtype=torch.int64)
         # or in the case of gpt2
         #   [[50257, 50257, 50257, ..., 50257, 50257, 50257]]
         x = graph.sample_limit(*batch_dims).to(device)
-        
+
         # generate timesteps
         #   [1.0, 0.99219, 0.98438e, 0.97656 ...]
         timesteps = torch.linspace(1, eps, steps + 1, device=device)
@@ -107,7 +106,7 @@ class Sampler:
             x = projector(x)
             t = timesteps[-1] * torch.ones(x.shape[0], 1, device=device)
             x = denoiser.update_fn(model, x, t)
-            
+
             if show_intermediate:
                 sentences = tokenizer.batch_decode(x)
                 for sentence in sentences:

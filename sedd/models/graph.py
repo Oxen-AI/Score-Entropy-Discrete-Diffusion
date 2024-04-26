@@ -73,7 +73,7 @@ class Graph(abc.ABC):
     def sample_rate(self, i, rate):
         return sample_categorical(F.one_hot(i, num_classes=self.dim).to(rate) + rate)
 
-    
+
     @abc.abstractmethod
     def staggered_score(self, score, dsigma):
         """
@@ -81,7 +81,7 @@ class Graph(abc.ABC):
         e^{-{dsigma} E} score
         """
         pass
-    
+
 
     @abc.abstractmethod
     def sample_limit(self, *batch_dims):
@@ -100,14 +100,14 @@ class Graph(abc.ABC):
 
 
 class AbsorbingGraph(Graph):
-    def __init__(self, dim):
+    def __init__(self, vocab_size):
         super().__init__()
-        self._dim = dim
+        self._dim = vocab_size + 1 # for the absorbing state
 
     @property
     def dim(self):
-        return self._dim + 1
-    
+        return self._dim
+
     @property
     def absorb(self):
         return True
@@ -115,7 +115,7 @@ class AbsorbingGraph(Graph):
     def rate(self, i):
         # edge = - F.one_hot(i, num_classes=self.dim)
         # edge.scatter_add_(-1, i[..., None], torch.ones_like(edge[..., :1]))
-        return F.one_hot((self.dim - 1) * torch.ones_like(i), num_classes=self.dim) - F.one_hot(i, num_classes=self.dim)        
+        return F.one_hot((self.dim - 1) * torch.ones_like(i), num_classes=self.dim) - F.one_hot(i, num_classes=self.dim)
 
     def transp_rate(self, i):
         edge = -F.one_hot(i, num_classes=self.dim)
@@ -124,7 +124,7 @@ class AbsorbingGraph(Graph):
 
     def transition(self, i, sigma):
         pass
-    
+
     def transp_transition(self, i, sigma):
         sigma = unsqueeze_as(sigma, i[..., None])
         edge = (-sigma).exp() * F.one_hot(i, num_classes=self.dim)
@@ -137,13 +137,13 @@ class AbsorbingGraph(Graph):
 
     def sample_transition(self, i, sigma):
         move_chance = 1 - (-sigma).exp()
-        print("move_chance", move_chance)
+        # print("move_chance", move_chance)
         move_indices = torch.rand(*i.shape, device=i.device) < move_chance
-        print("move_indices", move_indices)
+        # print("move_indices", move_indices)
         i_pert = torch.where(move_indices, self.dim - 1, i)
-        print("i_pert", i_pert)
+        # print("i_pert", i_pert)
         return i_pert
-    
+
     def staggered_score(self, score, dsigma):
         score = score.clone() # yeah yeah whatever we should probably do this
         extra_const = (1 - (dsigma).exp()) * score.sum(dim=-1)
@@ -154,27 +154,38 @@ class AbsorbingGraph(Graph):
     def sample_limit(self, *batch_dims):
         return (self.dim - 1) * torch.ones(*batch_dims, dtype=torch.int64)
 
+    # x is perturbed, x0 is the original
     def score_entropy(self, score, sigma, x, x0):
+        # This is where the sample has been absorbed / perturbed
+        # [[ True, False,  True,  True,  True, False, False,  True]]
         rel_ind = x == self.dim - 1
+        # print("rel_ind", rel_ind.shape, rel_ind)
+        
         esigm1 = torch.where(
             sigma < 0.5,
             torch.expm1(sigma),
             torch.exp(sigma) - 1
         )
+        # print("esigm1", esigm1.shape, esigm1)
 
         ratio = 1 / esigm1.expand_as(x)[rel_ind]
+        # print("ratio", ratio.shape, ratio)
+        
         other_ind = x0[rel_ind]
+        # print("other_ind", other_ind.shape, other_ind)
 
         # negative_term
         neg_term = ratio * torch.gather(score[rel_ind], -1, other_ind[..., None]).squeeze(-1)
+        # print("neg_term", neg_term.shape, neg_term)
 
         #positive term
         pos_term = score[rel_ind][:, :-1].exp().sum(dim=-1)
+        # print("pos_term", pos_term.shape, pos_term)
 
         # constant term
         const = ratio * (ratio.log() - 1)
+        # print("const", const.shape, const)
 
         entropy = torch.zeros(*x.shape, device=x.device)
         entropy[rel_ind] += pos_term - neg_term + const
         return entropy
-    

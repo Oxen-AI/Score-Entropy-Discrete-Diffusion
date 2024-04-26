@@ -13,7 +13,7 @@ from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
 class ABCTokenizer(PreTrainedTokenizer):
     def __init__(self, **kwargs):
         """ABCTokenizer for Hugging Face transformers."""
-        self.characters = list(string.ascii_letters) + list(string.digits) + list(string.punctuation) + [" ", '\n']
+        self.characters = list(string.ascii_letters) + list(string.digits) + list(string.punctuation) + ['\n', ' ']
         
         self.pad_token = AddedToken("[PAD]", lstrip=False, rstrip=False)
         self.unk_token = AddedToken("[UNK]", lstrip=False, rstrip=False)

@@ -1,22 +1,34 @@
+import os
 import torch
 import argparse
-
-from load_model import load_model
+import yaml
 from transformers import GPT2TokenizerFast
-import sampling
 
+from sedd.models.sedd import SEDD
+from sedd.models.graph import AbsorbingGraph
+from sedd.models.noise import LogLinearNoise
+from sedd.models.sampler import Sampler
 
 def main():
     parser = argparse.ArgumentParser(description="Generate some samples")
-    parser.add_argument("--model_path", default="louaaron/sedd-medium", type=str)
-    parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--steps", type=int, default=1024)
+    parser.add_argument("--model", type=str, required=True)
+    parser.add_argument("--tokenizer", default="gpt2", type=str)
     parser.add_argument("--prefix", type=str, default="")
     parser.add_argument("--suffix", type=str, default="")
-    parser.add_argument("--save_intermediate", type=str)
+    parser.add_argument("--show_intermediate", action='store_true')
+    parser.add_argument("--steps", type=int, default=1024)
+    parser.add_argument("--batch_size", type=int, default=1)
     args = parser.parse_args()
+    
+    # Config should be saved in the model directory
+    cfg = os.path.join(args.model, 'config.yaml')
+    with open(cfg, 'r') as f:
+        cfg = yaml.full_load(f)
 
+    # Load the tokenizer
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    
+    print("Vocab size: ", tokenizer.vocab_size)
 
     print("Complete prefix: ", args.prefix)
     print("with suffix: ", args.suffix)
@@ -30,47 +42,32 @@ def main():
     # input_ids = [0, 1, 512, 8080, 50256, 20000]
     # input_locs = [5, 6, 19, 20, 1000, 10001]
 
-
     input_ids = torch.tensor(input_ids, device="cuda")[None].repeat(args.batch_size, 1)
 
     def proj_fun(x):
         x[:, input_locs] = input_ids
         return x
-    
-    print("Load model: ", args.model_path)
+
+    # Load the model onto GPU
     device = torch.device('cuda')
-    model, graph, noise = load_model(args.model_path, device)
-<<<<<<< HEAD:run_sample_cond.py
+    model = SEDD(cfg, tokenizer.vocab_size).to(device)
+    model_file = os.path.join(args.model, "checkpoint.pth")
+    loaded_state = torch.load(model_file, map_location=device)
+    model.load_state_dict(loaded_state)
+
+    # Load the transition graph
+    graph = AbsorbingGraph(tokenizer.vocab_size)
     
-    if args.save_intermediate != None:
-        sampling_fn = sampling.get_pc_sampler(
-            graph,
-            noise,
-            (args.batch_size, 1024),
-            'analytic',
-            args.steps,
-            device=device,
-            proj_fun=proj_fun,
-            tokenizer=tokenizer,
-            save_intermediate=args.save_intermediate
-        )
-    else:
-        sampling_fn = sampling.get_pc_sampler(
-            graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun
-        )
-=======
+    # Load the noise function
+    noise = LogLinearNoise().to(device)
 
-    sampling_fn = sampling.get_pc_sampler(
-        graph, noise, (args.batch_size, 1024), 'analytic', args.steps, device=device, proj_fun=proj_fun
-    )
->>>>>>> cleanup:scripts/run_sample_cond.py
+    sampler = Sampler(cfg, device=device)
+    texts = sampler.sample(tokenizer, model, graph, noise, steps=args.steps, show_intermediate=args.show_intermediate, projector=proj_fun)
 
-    samples = proj_fun(sampling_fn(model))
-
-    text_samples = tokenizer.batch_decode(samples)
-    for i in text_samples:
+    for i in texts:
+        print("="*80)
         print(i)
-        print("=================================================")
+        print("="*80)
 
 if __name__=="__main__":
     main()

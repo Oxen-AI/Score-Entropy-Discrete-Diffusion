@@ -31,6 +31,7 @@ def main():
     print(f"Got noise: {sigma.item()}\n")
     print(sigma[:, None])
     
+    # Noisify the tokens
     perturbed_tokens = graph.sample_transition(tokens, sigma[:, None])
 
     print(f"Got shifted tokens:\n{perturbed_tokens}\n")

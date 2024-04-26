@@ -1,6 +1,6 @@
 
 training:
-  batch_size: 1
+  batch_size: 16
   accum: 1
   n_iters: 1000000
   n_epochs: 1000
@@ -12,11 +12,11 @@ training:
   ema: 0.9999
 
 model:
-  hidden_size: 1024
+  hidden_size: 512
   cond_dim: 128
-  length: 1024
-  n_blocks: 24
-  n_heads: 16
+  length: 32
+  n_blocks: 8
+  n_heads: 8
   dropout: 0.1
 
 noise:

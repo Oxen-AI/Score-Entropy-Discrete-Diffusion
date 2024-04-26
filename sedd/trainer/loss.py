@@ -17,7 +17,11 @@ def loss_fn(batch, model, noise, graph, train=True, t=None, perturbed_batch=None
         perturbed_batch = graph.sample_transition(batch, sigma[:, None])
 
     log_score = score_fn(model, perturbed_batch, sigma, train=train, sampling=False)
+    # print("log_score", log_score.shape)
+    # print(log_score)
     loss = graph.score_entropy(log_score, sigma[:, None], perturbed_batch, batch)
+    # print("loss", loss.shape)
+    # print(loss)
 
     loss = (dsigma[:, None] * loss).sum(dim=-1)
 

@@ -3,7 +3,7 @@ from .loss import step_fn
 import torch.optim as optim
 from itertools import chain
 import os
-import utils
+import torch
 
 class Trainer:
     def __init__(self, run, model, graph, noise, config, eval_callback=None, sample_callback=None, device='cuda', checkpoint_dir='checkpoints'):
@@ -19,17 +19,17 @@ class Trainer:
 
     def train(self, dataset):
         cfg = self.config
-        
+
         # build optimization state
         optimizer = optimizer = optim.AdamW(
             chain(self.model.parameters(), self.noise.parameters()),
-            lr=cfg['optim']['lr'], 
-            betas=(cfg['optim']['beta1'], 
+            lr=cfg['optim']['lr'],
+            betas=(cfg['optim']['beta1'],
                 cfg['optim']['beta2']),
             eps=cfg['optim']['eps'],
             weight_decay=cfg['optim']['weight_decay']
         )
-        
+
         state = dict(
             optimizer=optimizer,
             model=self.model,
@@ -37,17 +37,17 @@ class Trainer:
             graph=self.graph,
             step=0
         )
-        
+
         n_epochs = cfg['training']['n_epochs']
         for e in range(n_epochs):
             print(f"Epoch {e}")
             for batch in dataset:
                 self.step(state, batch)
-    
+
     def step(self, state, batch):
         cfg = self.config
         step = state['step']
-        
+
         batch = batch.to(self.device)
         loss = step_fn(cfg, state, batch, train=True)
 
@@ -60,9 +60,9 @@ class Trainer:
         if step % cfg['training']['eval_freq'] == 0:
             if self.eval_callback is not None:
                 self.eval_callback(state)
-                
+
         if step % cfg['training']['snapshot_freq'] == 0:
-            utils.save_checkpoint(os.path.join(self.checkpoint_dir, f'checkpoint.pth'), state, cfg)
+            torch.save(state['model'].state_dict(), os.path.join(self.checkpoint_dir, f'checkpoint.pth'))
 
         if step > 0 and step % cfg['training']['snapshot_freq'] == 0:
             # Generate and save samples

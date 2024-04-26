@@ -11,8 +11,8 @@ y = np.zeros(steps)
 for i in range(steps):
     noise = LogLinearNoise()
     sigma, _ = noise(torch.tensor(x[i]))
-    y[i] = 1 - (-sigma).exp()
-    # y[i] = sigma.item()
+    # y[i] = 1 - (-sigma).exp()
+    y[i] = sigma.item()
 
 # Create a 2D plot
 plt.figure()

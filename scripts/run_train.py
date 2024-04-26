@@ -13,6 +13,7 @@ from sedd.datasets.ox_dataset import OxDataset
 from sedd.datasets.brown_cow_dataset import BrownCowDataset
 from sedd.datasets.wikitext2_dataset import Wikitext2Dataset
 from sedd.datasets.open_subtitles_dataset import OpenSubtitlesDataset
+from sedd.datasets.baby_names_dataset import BabyNamesDataset
 from sedd.datasets.abc_dataset import ABCDataset
 
 from sedd.tokenizers.ox_tokenizer import OxTokenizer
@@ -54,9 +55,10 @@ def main():
 
     # load in tokenizer
     # tokenizer = OxTokenizer()
-    # tokenizer = ABCTokenizer()
-    tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-    tokenizer.pad_token = tokenizer.eos_token # make sure we pad with eos token
+    tokenizer = ABCTokenizer()
+    # tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+    print("Got EOS token: ", tokenizer.eos_token)
+    tokenizer.pad_token = '' # make sure we pad with absorbing token
 
     with open(args.cfg, 'r') as f:
         cfg = yaml.full_load(f)
@@ -102,9 +104,12 @@ def main():
     num_parameters = sum(p.numel() for p in score_model.parameters())
     print(f"Number of parameters in the model: {num_parameters}")
 
-    train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10_000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
-    eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
+    # train_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10_000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    # eval_ds = DataLoader(OpenSubtitlesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
+    train_ds = DataLoader(BabyNamesDataset(tokenizer, seq_len=cfg['model']['length']), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
+    eval_ds = DataLoader(BabyNamesDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128, train=False))
+    
     # train_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=10000), batch_size=cfg['training']['batch_size'], shuffle=True, num_workers=4)
     # eval_ds = DataLoader(ABCDataset(tokenizer, seq_len=cfg['model']['length'], num_examples=128))
 
@@ -124,7 +129,7 @@ def main():
         noise = state['noise']
 
         sampler = Sampler(cfg)
-        texts = sampler.sample(tokenizer, model, graph, noise, steps=128)
+        texts = sampler.sample(tokenizer, model, graph, noise, steps=128, batch_size=cfg['eval']['batch_size'])
 
         file_name = os.path.join(sample_dir, f"sample.txt")
         with open(file_name, 'w') as file:
