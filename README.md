@@ -32,30 +32,27 @@ Note that this installs with CUDA 11.8, and different CUDA versions must be inst
 
 ### Download Models
 
-Our pretrained models are hosted on huggingface ([small](https://huggingface.co/louaaron/sedd-small), [medium](https://huggingface.co/louaaron/sedd-medium)). However, models can also be loaded in locally (say after training). All functionality is found in ```load_model.py```.
+I uploaded the raw PyTorch `SEDD-large` model to Oxen.ai for convenience. To download you can simply run:
 
 ```
-# load in a pretrained model
-pretrained_small_model, graph, noise = load_model("louaaron/sedd-small")
-pretrained_medium_model, graph, noise = load_model("louaaron/sedd-medium")
-# load in a local experiment
-local_model, graph, noise = load_model("exp_local/experiment)
+oxen clone https://hub.oxen.ai/models/SEDD-large
 ```
 
-This loading gives the model, as well as the graph and noise (which are used for the loss/sampling setup).
+This repository contains both the model weights `checkpoint.pth` and the `config.yaml` file with other necessary parameters.
+
 
 ### Run Sampling
 
 We can run sampling using a command 
 
 ```
-python run_sample.py --model_path MODEL_PATH --steps STEPS
+python scripts/run_sample.py --model /path/to/SEDD-large --steps 128
 ```
 
 We can also sample conditionally using
 
 ```
-python run_sample_cond.py --model_path MODEL_PATH --step STEPS --prefix PREFIX --suffix SUFFIX
+python scripts/run_sample_cond.py --model_path MODEL_PATH --step STEPS --prefix PREFIX --suffix SUFFIX
 ```
 
 ## Training New Models
@@ -65,19 +62,11 @@ python run_sample_cond.py --model_path MODEL_PATH --step STEPS --prefix PREFIX -
 We provide training code, which can be run with the command
 
 ```
-python run_train.py
-```
-
-## Citation
-```
-@article{lou2024discrete,
-  title={Discrete diffusion modeling by estimating the ratios of the data distribution},
-  author={Lou, Aaron and Meng, Chenlin and Ermon, Stefano},
-  journal={arXiv preprint arXiv:2310.16834},
-  year={2024}
-}
+python scripts/run_train.py --repo oxen_username/repo_name
 ```
 
 ## Acknowledgements
 
 This repository builds heavily off of [Score Entropy Discrete Diffusion](https://github.com/louaaron/Score-Entropy-Discrete-Diffusion), [score sde](https://github.com/yang-song/score_sde_pytorch), [plaid](https://github.com/igul222/plaid), and [DiT](https://github.com/facebookresearch/DiT).
+
+It was stripped down for demo and learning purposes for [arXiv dives](https://www.oxen.ai/community) series by Oxen.ai.
